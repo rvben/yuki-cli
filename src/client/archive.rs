@@ -22,6 +22,19 @@ pub struct PaymentMethod {
     pub description: String,
 }
 
+/// A document returned by the Yuki archive search.
+#[derive(Debug, Clone)]
+pub struct ArchiveDocument {
+    pub id: String,
+    pub subject: String,
+    pub document_date: String,
+    pub amount: String,
+    pub folder: String,
+    pub contact_name: String,
+    pub file_name: String,
+    pub reference: String,
+}
+
 /// Client for the Yuki Archive SOAP service.
 pub struct ArchiveClient {
     soap: SoapClient,
@@ -46,13 +59,24 @@ impl ArchiveClient {
     }
 
     /// List all documents in an archive folder by folder ID.
-    pub async fn documents_in_folder(&self, folder_id: i32) -> Result<String, YukiError> {
+    pub async fn documents_in_folder(
+        &self,
+        folder_id: i32,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<ArchiveDocument>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("DocumentsInFolder")
             .session(session)
             .param("folderID", &folder_id.to_string())
+            .param("sortOrder", "DocumentDateDesc")
+            .param("startDate", start_date)
+            .param("endDate", end_date)
+            .param("numberOfRecords", "100")
+            .param("startRecord", "0")
             .build();
-        self.soap.call("DocumentsInFolder", envelope).await
+        let body = self.soap.call("DocumentsInFolder", envelope).await?;
+        Self::parse_archive_documents(&body)
     }
 
     /// List all documents of a given document type.
@@ -65,14 +89,31 @@ impl ArchiveClient {
         self.soap.call("DocumentsByType", envelope).await
     }
 
-    /// Search documents using a free-text query.
-    pub async fn search_documents(&self, query: &str) -> Result<String, YukiError> {
+    /// Search documents in the archive using a free-text query within a date range.
+    ///
+    /// Pass an empty string for `search_text` to retrieve all documents in the period.
+    /// Returns up to 500 results sorted by document date descending.
+    pub async fn search_documents(
+        &self,
+        search_text: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<ArchiveDocument>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("SearchDocuments")
             .session(session)
-            .param("searchText", query)
+            .param("searchOption", "All")
+            .param("searchText", search_text)
+            .param("folderID", "-1")
+            .param("tabID", "-1")
+            .param("sortOrder", "DocumentDateDesc")
+            .param("startDate", start_date)
+            .param("endDate", end_date)
+            .param("numberOfRecords", "500")
+            .param("startRecord", "0")
             .build();
-        self.soap.call("SearchDocuments", envelope).await
+        let body = self.soap.call("SearchDocuments", envelope).await?;
+        Self::parse_archive_documents(&body)
     }
 
     /// List documents of a given type that were modified since the specified date.
@@ -162,6 +203,105 @@ impl ArchiveClient {
         let envelope = SoapEnvelope::new("PaymentMethods").session(session).build();
         let body = self.soap.call("PaymentMethods", envelope).await?;
         Self::parse_payment_methods(&body)
+    }
+
+    /// Parse a SearchDocuments or DocumentsInFolder SOAP response into a list of documents.
+    ///
+    /// Each `<Document ID="uuid">` element carries child elements for each field.
+    /// The document ID is an XML attribute; all other fields are child text nodes.
+    fn parse_archive_documents(xml: &str) -> Result<Vec<ArchiveDocument>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut documents = Vec::new();
+        let mut in_document = false;
+        let mut current_field = String::new();
+        let mut doc = ArchiveDocument {
+            id: String::new(),
+            subject: String::new(),
+            document_date: String::new(),
+            amount: String::new(),
+            folder: String::new(),
+            contact_name: String::new(),
+            file_name: String::new(),
+            reference: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Document" => {
+                            in_document = true;
+                            doc = ArchiveDocument {
+                                id: String::new(),
+                                subject: String::new(),
+                                document_date: String::new(),
+                                amount: String::new(),
+                                folder: String::new(),
+                                contact_name: String::new(),
+                                file_name: String::new(),
+                                reference: String::new(),
+                            };
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"ID" {
+                                    doc.id = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                            }
+                        }
+                        "Subject" | "DocumentDate" | "Amount" | "Folder" | "ContactName"
+                        | "FileName" | "Reference"
+                            if in_document =>
+                        {
+                            current_field = local;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) if in_document && !current_field.is_empty() => {
+                    let text = e
+                        .unescape()
+                        .map_err(|e| YukiError::Xml(e.to_string()))?
+                        .trim()
+                        .to_string();
+                    match current_field.as_str() {
+                        "Subject" => doc.subject = text,
+                        "DocumentDate" => doc.document_date = text,
+                        "Amount" => doc.amount = text,
+                        "Folder" => doc.folder = text,
+                        "ContactName" => doc.contact_name = text,
+                        "FileName" => doc.file_name = text,
+                        "Reference" => doc.reference = text,
+                        _ => {}
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let name = e.name();
+                    let local = local_name(name.as_ref());
+                    match local {
+                        "Subject" | "DocumentDate" | "Amount" | "Folder" | "ContactName"
+                        | "FileName" | "Reference" => {
+                            current_field.clear();
+                        }
+                        "Document" => {
+                            if !doc.id.is_empty() {
+                                documents.push(doc.clone());
+                            }
+                            in_document = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(documents)
     }
 
     /// Parse a CostCategories SOAP response.
