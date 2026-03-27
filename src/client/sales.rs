@@ -1,8 +1,19 @@
+use quick_xml::Reader;
+use quick_xml::events::Event;
+
 use crate::error::YukiError;
 
+use super::local_name;
 use super::soap_client::{SoapClient, SoapEnvelope};
 
 const BASE_URL: &str = "https://api.yukiworks.nl/ws/Sales.asmx";
+
+/// A Yuki sales item (product or service available for invoicing).
+#[derive(Debug, Clone)]
+pub struct SalesItem {
+    pub id: String,
+    pub description: String,
+}
 
 /// Client for the Yuki Sales SOAP service.
 pub struct SalesClient {
@@ -27,11 +38,83 @@ impl SalesClient {
         self.soap.authenticate(api_key).await
     }
 
-    /// Retrieve all sales items as a raw XML body.
-    pub async fn get_sales_items(&self) -> Result<String, YukiError> {
+    /// Retrieve all sales items.
+    pub async fn get_sales_items(&self) -> Result<Vec<SalesItem>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("GetSalesItems").session(session).build();
-        self.soap.call("GetSalesItems", envelope).await
+        let body = self.soap.call("GetSalesItems", envelope).await?;
+        Self::parse_sales_items(&body)
+    }
+
+    /// Parse a GetSalesItems SOAP response into a list of `SalesItem` values.
+    ///
+    /// Each `SalesItem` element carries child elements `id` and `description`.
+    pub fn parse_sales_items(xml: &str) -> Result<Vec<SalesItem>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut items = Vec::new();
+        let mut in_item = false;
+        let mut field: Option<String> = None;
+        let mut current = SalesItem {
+            id: String::new(),
+            description: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "SalesItem" => {
+                            in_item = true;
+                            current = SalesItem {
+                                id: String::new(),
+                                description: String::new(),
+                            };
+                        }
+                        "id" | "description" if in_item => {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "id" => current.id = text,
+                            "description" => current.description = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "id" | "description" => {
+                            field = None;
+                        }
+                        "SalesItem" if in_item => {
+                            items.push(current.clone());
+                            in_item = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(items)
     }
 }
 

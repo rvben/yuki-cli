@@ -1,8 +1,23 @@
+use quick_xml::Reader;
+use quick_xml::events::Event;
+
 use crate::error::YukiError;
 
+use super::local_name;
 use super::soap_client::{SoapClient, SoapEnvelope};
 
 const BASE_URL: &str = "https://api.yukiworks.nl/ws/AccountingInfo.asmx";
+
+/// Full details for a single transaction line.
+#[derive(Debug, Clone)]
+pub struct TransactionDetail {
+    pub id: String,
+    pub date: String,
+    pub description: String,
+    pub amount: String,
+    pub currency: String,
+    pub gl_account_code: String,
+}
 
 /// Client for the Yuki AccountingInfo SOAP service.
 pub struct AccountingInfoClient {
@@ -28,13 +43,105 @@ impl AccountingInfoClient {
     }
 
     /// Retrieve full details for a single transaction by ID.
-    pub async fn get_transaction_details(&self, transaction_id: &str) -> Result<String, YukiError> {
+    pub async fn get_transaction_details(
+        &self,
+        transaction_id: &str,
+    ) -> Result<Vec<TransactionDetail>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("GetTransactionDetails")
             .session(session)
             .param("transactionId", transaction_id)
             .build();
-        self.soap.call("GetTransactionDetails", envelope).await
+        let body = self.soap.call("GetTransactionDetails", envelope).await?;
+        Self::parse_transaction_details(&body)
+    }
+
+    /// Parse a GetTransactionDetails SOAP response into a list of `TransactionDetail` values.
+    ///
+    /// Each `TransactionInfo` element carries child elements `id`, `transactionDate`,
+    /// `description`, `transactionAmount`, `currency`, and `glAccountCode`.
+    pub fn parse_transaction_details(xml: &str) -> Result<Vec<TransactionDetail>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut details = Vec::new();
+        let mut in_info = false;
+        let mut field: Option<String> = None;
+        let mut current = TransactionDetail {
+            id: String::new(),
+            date: String::new(),
+            description: String::new(),
+            amount: String::new(),
+            currency: String::new(),
+            gl_account_code: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "TransactionInfo" => {
+                            in_info = true;
+                            current = TransactionDetail {
+                                id: String::new(),
+                                date: String::new(),
+                                description: String::new(),
+                                amount: String::new(),
+                                currency: String::new(),
+                                gl_account_code: String::new(),
+                            };
+                        }
+                        "id" | "transactionDate" | "description" | "transactionAmount"
+                        | "currency" | "glAccountCode"
+                            if in_info =>
+                        {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "id" => current.id = text,
+                            "transactionDate" => current.date = text,
+                            "description" => current.description = text,
+                            "transactionAmount" => current.amount = text,
+                            "currency" => current.currency = text,
+                            "glAccountCode" => current.gl_account_code = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "id" | "transactionDate" | "description" | "transactionAmount"
+                        | "currency" | "glAccountCode" => {
+                            field = None;
+                        }
+                        "TransactionInfo" if in_info => {
+                            details.push(current.clone());
+                            in_info = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(details)
     }
 
     /// Retrieve transactions for a GL account code over a date range.

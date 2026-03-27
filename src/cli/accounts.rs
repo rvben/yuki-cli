@@ -1,4 +1,6 @@
 use crate::cli::setup_domain;
+use crate::client::accounting::AccountingClient;
+use crate::client::soap_client::SoapClient;
 use crate::config::Config;
 use crate::error::YukiError;
 use crate::output::{OutputFormat, format_json, format_table, is_tty};
@@ -14,9 +16,10 @@ pub async fn balance(
     let (start, _end) = resolve_period(period)?;
     let gl_code = account.unwrap_or("");
     let (client, entry) = setup_domain(config, admin).await?;
-    let balance = client
+    let xml = client
         .gl_account_balance(&entry.admin_id, gl_code, &start)
         .await?;
+    let balance = SoapClient::parse_single_result(&xml, "GLAccountBalanceResult").unwrap_or(xml);
 
     let headers = vec!["Account".into(), "Date".into(), "Balance".into()];
     let rows = vec![vec![gl_code.to_string(), start, balance]];
@@ -42,9 +45,25 @@ pub async fn transactions(
     let xml = client
         .gl_account_transactions(&entry.admin_id, gl_code, &start, &end)
         .await?;
+    let transactions = AccountingClient::parse_gl_transactions(&xml)?;
 
-    let headers = vec!["Raw XML".into()];
-    let rows = vec![vec![xml]];
+    let headers = vec![
+        "ID".into(),
+        "Date".into(),
+        "Amount".into(),
+        "Description".into(),
+    ];
+    let rows: Vec<Vec<String>> = transactions
+        .iter()
+        .map(|t| {
+            vec![
+                t.id.clone(),
+                t.date.clone(),
+                t.amount.clone(),
+                t.description.clone(),
+            ]
+        })
+        .collect();
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {

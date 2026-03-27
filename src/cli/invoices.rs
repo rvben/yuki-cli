@@ -49,10 +49,13 @@ pub async fn list(
         _ => {
             let mut client = SalesClient::new();
             client.authenticate(&config.api_key).await?;
-            let xml = client.get_sales_items().await?;
+            let items = client.get_sales_items().await?;
 
-            let headers = vec!["Raw XML".into()];
-            let rows = vec![vec![xml]];
+            let headers = vec!["ID".into(), "Description".into()];
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|i| vec![i.id.clone(), i.description.clone()])
+                .collect();
 
             match fmt {
                 OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
@@ -72,10 +75,29 @@ pub async fn show(
 ) -> Result<(), YukiError> {
     let mut client = AccountingInfoClient::new();
     client.authenticate(&config.api_key).await?;
-    let xml = client.get_transaction_details(id).await?;
+    let details = client.get_transaction_details(id).await?;
 
-    let headers = vec!["Raw XML".into()];
-    let rows = vec![vec![xml]];
+    let headers = vec![
+        "ID".into(),
+        "Date".into(),
+        "Amount".into(),
+        "Currency".into(),
+        "GL Account".into(),
+        "Description".into(),
+    ];
+    let rows: Vec<Vec<String>> = details
+        .iter()
+        .map(|d| {
+            vec![
+                d.id.clone(),
+                d.date.clone(),
+                d.amount.clone(),
+                d.currency.clone(),
+                d.gl_account_code.clone(),
+                d.description.clone(),
+            ]
+        })
+        .collect();
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
