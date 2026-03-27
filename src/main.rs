@@ -204,6 +204,16 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 }
+                CheckCommands::Unmatched { period } => {
+                    yuki_cli::cli::check::unmatched(
+                        &config,
+                        admin,
+                        period.as_deref(),
+                        format,
+                        cli.quiet,
+                    )
+                    .await?;
+                }
             }
         }
     }

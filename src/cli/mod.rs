@@ -214,4 +214,11 @@ pub enum CheckCommands {
         /// Fiscal year (e.g. 2025).
         year: Option<String>,
     },
+
+    /// Find bank transactions without matching booked invoices.
+    Unmatched {
+        /// Accounting period (e.g. 2025-Q1).
+        #[arg(long)]
+        period: Option<String>,
+    },
 }

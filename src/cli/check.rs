@@ -1,4 +1,5 @@
 use crate::cli::setup_domain;
+use crate::client::accounting::AccountingClient;
 use crate::client::accounting_info::AccountingInfoClient;
 use crate::client::archive::ArchiveClient;
 use crate::client::vat::VatClient;
@@ -204,6 +205,120 @@ pub async fn jaarwerk(
     match fmt {
         OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
+    }
+    Ok(())
+}
+
+/// Extract the counterparty name from a SEPA bank transaction description.
+///
+/// SEPA descriptions encode counterparty info in the format:
+/// `/CNTP/<iban>/<bic>/<name>/`
+///
+/// Falls back to the first 50 characters of the description when the field is absent.
+fn parse_counterparty(description: &str) -> String {
+    if let Some(cntp_start) = description.find("/CNTP/") {
+        let after_cntp = &description[cntp_start + 6..];
+        let parts: Vec<&str> = after_cntp.splitn(4, '/').collect();
+        if parts.len() >= 3 {
+            return parts[2].trim().to_string();
+        }
+    }
+    description
+        .chars()
+        .take(50)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+/// Find bank transactions on GL account 11001 that have no matching outstanding creditor item.
+///
+/// Each bank debit (negative amount) is matched by absolute amount against the pool of
+/// outstanding creditor items. Debits that remain unmatched are reported as potentially
+/// missing invoices.
+pub async fn unmatched(
+    config: &Config,
+    admin: Option<&str>,
+    period: Option<&str>,
+    format: Option<&str>,
+    quiet: bool,
+) -> Result<(), YukiError> {
+    let (start, end) = resolve_period(period)?;
+
+    if !quiet {
+        eprintln!("[1/2] Fetching bank transactions (GL 11001)...");
+    }
+    let mut accounting_client = AccountingClient::new();
+    accounting_client.authenticate(&config.api_key).await?;
+    let (accounting_client, entry) = {
+        let entry = config.resolve_admin(admin)?;
+        accounting_client
+            .set_current_domain(&entry.domain_id)
+            .await?;
+        (accounting_client, entry)
+    };
+
+    let raw = accounting_client
+        .gl_account_transactions(&entry.admin_id, "11001", &start, &end)
+        .await?;
+    let transactions = AccountingClient::parse_gl_transactions(&raw)?;
+
+    if !quiet {
+        eprintln!("[2/2] Fetching outstanding creditor items...");
+    }
+    let creditor_items = accounting_client
+        .outstanding_creditor_items(&entry.admin_id)
+        .await?;
+
+    if !quiet {
+        eprintln!("API calls made: 3");
+    }
+
+    // Build a pool of creditor open amounts for single-pass matching.
+    // Key: canonical amount string (absolute value), value: remaining count.
+    let mut creditor_pool: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for item in &creditor_items {
+        let key = item.open_amount.trim().to_string();
+        *creditor_pool.entry(key).or_insert(0) += 1;
+    }
+
+    let mut unmatched_rows: Vec<Vec<String>> = Vec::new();
+
+    for tx in &transactions {
+        let amount: f64 = tx.amount.trim().parse().unwrap_or(0.0);
+        if amount >= 0.0 {
+            // Only debits (payments out) are relevant.
+            continue;
+        }
+        // Represent the absolute value as a rounded-cent string for matching.
+        let abs_amount = format!("{:.2}", amount.abs());
+        if let Some(count) = creditor_pool.get_mut(&abs_amount)
+            && *count > 0
+        {
+            *count -= 1;
+            continue;
+        }
+        let counterparty = parse_counterparty(&tx.description);
+        unmatched_rows.push(vec![
+            tx.date.clone(),
+            format!("-{abs_amount}"),
+            counterparty,
+            tx.description.chars().take(80).collect::<String>(),
+        ]);
+    }
+
+    let headers = vec![
+        "Date".into(),
+        "Amount".into(),
+        "Counterparty".into(),
+        "Description".into(),
+    ];
+
+    let fmt = OutputFormat::from_flag(format, is_tty());
+    match fmt {
+        OutputFormat::Table => println!("{}", format_table(&headers, &unmatched_rows)),
+        OutputFormat::Json => println!("{}", format_json(&headers, &unmatched_rows)),
     }
     Ok(())
 }

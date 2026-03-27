@@ -29,6 +29,7 @@ pub struct OutstandingItem {
 /// A general ledger transaction.
 #[derive(Debug, Clone)]
 pub struct GlTransaction {
+    pub id: String,
     pub date: String,
     pub description: String,
     pub gl_account: String,
@@ -183,6 +184,91 @@ impl AccountingClient {
             .call("OutstandingCreditorItemsByDate", envelope)
             .await?;
         Self::parse_outstanding_items(&body, "OutstandingCreditorItemsByDateResult")
+    }
+
+    /// Parse a GLAccountTransactions SOAP response into a list of `GlTransaction` values.
+    ///
+    /// Each `GLAccountTransaction` element carries an `ID` attribute and child elements
+    /// `Date`, `Description`, `Amount`, and `GLAccountCode`.
+    pub fn parse_gl_transactions(xml: &str) -> Result<Vec<GlTransaction>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut transactions = Vec::new();
+        let mut in_transaction = false;
+        let mut field: Option<String> = None;
+        let mut current = GlTransaction {
+            id: String::new(),
+            date: String::new(),
+            description: String::new(),
+            gl_account: String::new(),
+            amount: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "GLAccountTransaction" => {
+                            in_transaction = true;
+                            current = GlTransaction {
+                                id: String::new(),
+                                date: String::new(),
+                                description: String::new(),
+                                gl_account: String::new(),
+                                amount: String::new(),
+                            };
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"ID" {
+                                    current.id = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                            }
+                        }
+                        "Date" | "Description" | "Amount" | "GLAccountCode" if in_transaction => {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "Date" => current.date = text,
+                            "Description" => current.description = text,
+                            "Amount" => current.amount = text,
+                            "GLAccountCode" => current.gl_account = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Date" | "Description" | "Amount" | "GLAccountCode" => {
+                            field = None;
+                        }
+                        "GLAccountTransaction" if in_transaction => {
+                            transactions.push(current.clone());
+                            in_transaction = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(transactions)
     }
 
     /// Parse an Administrations SOAP response into a list of `Administration` values.
