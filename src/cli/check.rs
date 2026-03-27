@@ -21,29 +21,28 @@ pub async fn btw(
     }
     let mut vat_client = VatClient::new();
     vat_client.authenticate(&config.api_key).await?;
-    let admin_id = config.resolve_admin(admin)?;
-    let vat_returns = vat_client.vat_return_list(&admin_id).await?;
+    let (accounting_client, entry) = setup_domain(config, admin).await?;
+    let vat_returns = vat_client.vat_return_list(&entry.admin_id).await?;
 
     if !quiet {
         eprintln!("[2/5] Fetching GL account transactions...");
     }
-    let accounting_client = setup_domain(config, admin).await?;
     let _transactions = accounting_client
-        .gl_account_transactions("", &start, &end)
+        .gl_account_transactions(&entry.admin_id, "", &start, &end)
         .await?;
 
     if !quiet {
         eprintln!("[3/5] Fetching outstanding debtor items...");
     }
     let debtors = accounting_client
-        .outstanding_debtor_items_by_date(&end)
+        .outstanding_debtor_items_by_date(&entry.admin_id, &start, &end)
         .await?;
 
     if !quiet {
         eprintln!("[4/5] Fetching outstanding creditor items...");
     }
     let creditors = accounting_client
-        .outstanding_creditor_items_by_date(&end)
+        .outstanding_creditor_items_by_date(&entry.admin_id, &start, &end)
         .await?;
 
     if !quiet {
@@ -51,9 +50,7 @@ pub async fn btw(
     }
     let mut archive_client = ArchiveClient::new();
     archive_client.authenticate(&config.api_key).await?;
-    let _modified = archive_client
-        .modified_documents_by_type("", &start)
-        .await?;
+    let _modified = archive_client.modified_documents_by_type(0, &start).await?;
 
     if !quiet {
         let api_calls = 5;
@@ -135,19 +132,19 @@ pub async fn jaarwerk(
     if !quiet {
         eprintln!("[2/4] Fetching GL account balances...");
     }
-    let accounting_client = setup_domain(config, admin).await?;
+    let (accounting_client, entry) = setup_domain(config, admin).await?;
     let balance = accounting_client
-        .gl_account_balance("", &start, &end)
+        .gl_account_balance(&entry.admin_id, "", &end)
         .await?;
 
     if !quiet {
         eprintln!("[3/4] Fetching outstanding items...");
     }
     let debtors = accounting_client
-        .outstanding_debtor_items_by_date(&end)
+        .outstanding_debtor_items_by_date(&entry.admin_id, &start, &end)
         .await?;
     let creditors = accounting_client
-        .outstanding_creditor_items_by_date(&end)
+        .outstanding_creditor_items_by_date(&entry.admin_id, &start, &end)
         .await?;
 
     if !quiet {
@@ -155,9 +152,7 @@ pub async fn jaarwerk(
     }
     let mut archive_client = ArchiveClient::new();
     archive_client.authenticate(&config.api_key).await?;
-    let _modified = archive_client
-        .modified_documents_by_type("", &start)
-        .await?;
+    let _modified = archive_client.modified_documents_by_type(0, &start).await?;
 
     if !quiet {
         let api_calls = 5;

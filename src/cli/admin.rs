@@ -8,10 +8,10 @@ pub async fn list(config: &Config, format: Option<&str>) -> Result<(), YukiError
     client.authenticate(&config.api_key).await?;
     let admins = client.administrations().await?;
 
-    let headers = vec!["Name".into(), "ID".into()];
+    let headers = vec!["Name".into(), "Admin ID".into(), "Domain ID".into()];
     let rows: Vec<Vec<String>> = admins
         .iter()
-        .map(|a| vec![a.name.clone(), a.id.clone()])
+        .map(|a| vec![a.name.clone(), a.id.clone(), a.domain_id.clone()])
         .collect();
 
     let fmt = OutputFormat::from_flag(format, is_tty());

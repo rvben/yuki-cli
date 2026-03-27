@@ -14,9 +14,15 @@ pub async fn list(
     client.authenticate(&config.api_key).await?;
 
     let xml = match (folder, doc_type) {
-        (Some(f), _) => client.documents_in_folder(f).await?,
-        (None, Some(t)) => client.documents_by_type(t).await?,
-        (None, None) => client.documents_in_folder("").await?,
+        (Some(f), _) => {
+            let folder_id: i32 = f.parse().unwrap_or(0);
+            client.documents_in_folder(folder_id).await?
+        }
+        (None, Some(t)) => {
+            let doc_type_id: i32 = t.parse().unwrap_or(0);
+            client.documents_by_type(doc_type_id).await?
+        }
+        (None, None) => client.documents_in_folder(0).await?,
     };
 
     let headers = vec!["Raw XML".into()];

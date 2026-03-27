@@ -112,6 +112,10 @@ impl SoapClient {
             return Err(YukiError::RateLimited);
         }
         if !status.is_success() {
+            // SOAP faults are returned as HTTP 500 — try to parse them
+            if let Some(fault) = Self::parse_soap_fault(&body) {
+                return Err(fault);
+            }
             return Err(YukiError::Http {
                 status: status.as_u16(),
                 body,

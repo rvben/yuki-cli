@@ -124,7 +124,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     yuki_cli::cli::accounts::balance(
                         &config,
                         admin,
-                        &account,
+                        account.as_deref(),
                         period.as_deref(),
                         format,
                     )
@@ -134,7 +134,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     yuki_cli::cli::accounts::transactions(
                         &config,
                         admin,
-                        &account,
+                        account.as_deref(),
                         period.as_deref(),
                         format,
                     )

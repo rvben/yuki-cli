@@ -1,4 +1,4 @@
-use yuki_cli::config::Config;
+use yuki_cli::config::{AdminEntry, Config};
 
 #[test]
 fn loads_valid_config() {
@@ -10,9 +10,13 @@ fn loads_valid_config() {
 api_key = "00000000-0000-0000-0000-000000000000"
 default_admin = "company_a"
 
-[administrations]
-company_a = "uuid-1"
-company_b = "uuid-2"
+[administrations.company_a]
+domain_id = "uuid-1"
+admin_id = "admin-1"
+
+[administrations.company_b]
+domain_id = "uuid-2"
+admin_id = "admin-2"
 "#,
     )
     .unwrap();
@@ -21,7 +25,8 @@ company_b = "uuid-2"
     assert_eq!(config.api_key, "00000000-0000-0000-0000-000000000000");
     assert_eq!(config.default_admin, "company_a");
     assert_eq!(config.administrations.len(), 2);
-    assert_eq!(config.administrations["company_a"], "uuid-1");
+    assert_eq!(config.administrations["company_a"].domain_id, "uuid-1");
+    assert_eq!(config.administrations["company_a"].admin_id, "admin-1");
 }
 
 #[test]
@@ -48,14 +53,22 @@ fn saves_config_roundtrip() {
     let config = Config {
         api_key: "test-key".into(),
         default_admin: "my_company".into(),
-        administrations: [("my_company".into(), "uuid-123".into())].into(),
+        administrations: [(
+            "my_company".into(),
+            AdminEntry {
+                domain_id: "uuid-123".into(),
+                admin_id: "admin-123".into(),
+            },
+        )]
+        .into(),
     };
 
     config.save_to(&path).unwrap();
     let loaded = Config::load_from(&path).unwrap();
     assert_eq!(loaded.api_key, "test-key");
     assert_eq!(loaded.default_admin, "my_company");
-    assert_eq!(loaded.administrations["my_company"], "uuid-123");
+    assert_eq!(loaded.administrations["my_company"].domain_id, "uuid-123");
+    assert_eq!(loaded.administrations["my_company"].admin_id, "admin-123");
 }
 
 #[test]
@@ -66,13 +79,22 @@ fn config_path_returns_xdg_path() {
 }
 
 #[test]
-fn resolve_admin_returns_uuid_for_known_name() {
+fn resolve_admin_returns_entry_for_known_name() {
     let config = Config {
         api_key: "key".into(),
         default_admin: "co_a".into(),
-        administrations: [("co_a".into(), "uuid-a".into())].into(),
+        administrations: [(
+            "co_a".into(),
+            AdminEntry {
+                domain_id: "uuid-a".into(),
+                admin_id: "admin-a".into(),
+            },
+        )]
+        .into(),
     };
-    assert_eq!(config.resolve_admin(None).unwrap(), "uuid-a");
+    let entry = config.resolve_admin(None).unwrap();
+    assert_eq!(entry.domain_id, "uuid-a");
+    assert_eq!(entry.admin_id, "admin-a");
 }
 
 #[test]
@@ -81,12 +103,26 @@ fn resolve_admin_override_takes_precedence() {
         api_key: "key".into(),
         default_admin: "co_a".into(),
         administrations: [
-            ("co_a".into(), "uuid-a".into()),
-            ("co_b".into(), "uuid-b".into()),
+            (
+                "co_a".into(),
+                AdminEntry {
+                    domain_id: "uuid-a".into(),
+                    admin_id: "admin-a".into(),
+                },
+            ),
+            (
+                "co_b".into(),
+                AdminEntry {
+                    domain_id: "uuid-b".into(),
+                    admin_id: "admin-b".into(),
+                },
+            ),
         ]
         .into(),
     };
-    assert_eq!(config.resolve_admin(Some("co_b")).unwrap(), "uuid-b");
+    let entry = config.resolve_admin(Some("co_b")).unwrap();
+    assert_eq!(entry.domain_id, "uuid-b");
+    assert_eq!(entry.admin_id, "admin-b");
 }
 
 #[test]
@@ -94,7 +130,14 @@ fn resolve_admin_errors_on_unknown_name() {
     let config = Config {
         api_key: "key".into(),
         default_admin: "co_a".into(),
-        administrations: [("co_a".into(), "uuid-a".into())].into(),
+        administrations: [(
+            "co_a".into(),
+            AdminEntry {
+                domain_id: "uuid-a".into(),
+                admin_id: "admin-a".into(),
+            },
+        )]
+        .into(),
     };
     assert!(config.resolve_admin(Some("unknown")).is_err());
 }

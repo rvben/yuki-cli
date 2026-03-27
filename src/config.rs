@@ -5,11 +5,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::YukiError;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminEntry {
+    pub domain_id: String,
+    pub admin_id: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub api_key: String,
     pub default_admin: String,
-    pub administrations: BTreeMap<String, String>,
+    pub administrations: BTreeMap<String, AdminEntry>,
 }
 
 impl Config {
@@ -48,7 +54,7 @@ impl Config {
             .map_err(|e| YukiError::Config(format!("failed to write {}: {e}", path.display())))
     }
 
-    pub fn resolve_admin(&self, override_name: Option<&str>) -> Result<String, YukiError> {
+    pub fn resolve_admin(&self, override_name: Option<&str>) -> Result<AdminEntry, YukiError> {
         let name = override_name.unwrap_or(&self.default_admin);
         self.administrations
             .get(name)

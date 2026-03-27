@@ -10,19 +10,22 @@ pub mod vat;
 use clap::{Parser, Subcommand};
 
 use crate::client::accounting::AccountingClient;
-use crate::config::Config;
+use crate::config::{AdminEntry, Config};
 use crate::error::YukiError;
 
 /// Authenticate a client and set the active administration domain.
+///
+/// Returns both the configured client and the resolved `AdminEntry` so callers
+/// can pass `admin_id` to operations that require `administrationID`.
 pub async fn setup_domain(
     config: &Config,
     admin: Option<&str>,
-) -> Result<AccountingClient, YukiError> {
-    let admin_id = config.resolve_admin(admin)?;
+) -> Result<(AccountingClient, AdminEntry), YukiError> {
+    let entry = config.resolve_admin(admin)?;
     let mut client = AccountingClient::new();
     client.authenticate(&config.api_key).await?;
-    client.set_current_domain(&admin_id).await?;
-    Ok(client)
+    client.set_current_domain(&entry.domain_id).await?;
+    Ok((client, entry))
 }
 
 /// Top-level CLI entry point for the Yuki bookkeeping API client.
@@ -167,7 +170,7 @@ pub enum AccountCommands {
     Balance {
         /// GL account code.
         #[arg(long)]
-        account: String,
+        account: Option<String>,
 
         /// Accounting period (e.g. 2025-01).
         #[arg(long)]
@@ -178,7 +181,7 @@ pub enum AccountCommands {
     Transactions {
         /// GL account code.
         #[arg(long)]
-        account: String,
+        account: Option<String>,
 
         /// Accounting period (e.g. 2025-01).
         #[arg(long)]

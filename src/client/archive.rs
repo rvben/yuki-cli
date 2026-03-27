@@ -27,22 +27,22 @@ impl ArchiveClient {
         self.soap.authenticate(api_key).await
     }
 
-    /// List all documents in a named archive folder.
-    pub async fn documents_in_folder(&self, folder: &str) -> Result<String, YukiError> {
+    /// List all documents in an archive folder by folder ID.
+    pub async fn documents_in_folder(&self, folder_id: i32) -> Result<String, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("DocumentsInFolder")
             .session(session)
-            .param("folder", folder)
+            .param("folderID", &folder_id.to_string())
             .build();
         self.soap.call("DocumentsInFolder", envelope).await
     }
 
     /// List all documents of a given document type.
-    pub async fn documents_by_type(&self, doc_type: &str) -> Result<String, YukiError> {
+    pub async fn documents_by_type(&self, doc_type: i32) -> Result<String, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("DocumentsByType")
             .session(session)
-            .param("documentType", doc_type)
+            .param("documentType", &doc_type.to_string())
             .build();
         self.soap.call("DocumentsByType", envelope).await
     }
@@ -52,22 +52,22 @@ impl ArchiveClient {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("SearchDocuments")
             .session(session)
-            .param("searchQuery", query)
+            .param("searchText", query)
             .build();
         self.soap.call("SearchDocuments", envelope).await
     }
 
-    /// List documents of a given type that were modified after the specified date.
+    /// List documents of a given type that were modified since the specified date.
     pub async fn modified_documents_by_type(
         &self,
-        doc_type: &str,
-        modified_after: &str,
+        doc_type: i32,
+        modified_since: &str,
     ) -> Result<String, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("ModifiedDocumentsByType")
             .session(session)
-            .param("documentType", doc_type)
-            .param("modifiedAfter", modified_after)
+            .param("documentType", &doc_type.to_string())
+            .param("modifiedSince", modified_since)
             .build();
         self.soap.call("ModifiedDocumentsByType", envelope).await
     }

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 
 use crate::client::accounting::AccountingClient;
-use crate::config::Config;
+use crate::config::{AdminEntry, Config};
 use crate::error::YukiError;
 
 /// Convert an administration name to a safe config key.
@@ -88,9 +88,18 @@ pub async fn run() -> Result<(), YukiError> {
         safe_name(&admins[idx - 1].name)
     };
 
-    let administrations: BTreeMap<String, String> = admins
+    // Store both domain_id and admin_id per administration
+    let administrations: BTreeMap<String, AdminEntry> = admins
         .iter()
-        .map(|a| (safe_name(&a.name), a.id.clone()))
+        .map(|a| {
+            (
+                safe_name(&a.name),
+                AdminEntry {
+                    domain_id: a.domain_id.clone(),
+                    admin_id: a.id.clone(),
+                },
+            )
+        })
         .collect();
 
     let config = Config {

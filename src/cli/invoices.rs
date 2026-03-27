@@ -4,12 +4,11 @@ use crate::client::sales::SalesClient;
 use crate::config::Config;
 use crate::error::YukiError;
 use crate::output::{OutputFormat, format_json, format_table, is_tty};
-use crate::period::parse_period;
 
 pub async fn list(
     config: &Config,
     admin: Option<&str>,
-    period: Option<&str>,
+    _period: Option<&str>,
     invoice_type: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
@@ -17,14 +16,8 @@ pub async fn list(
 
     match invoice_type {
         Some("purchase") | Some("creditor") => {
-            let (start, end) = resolve_period(period)?;
-            let client = setup_domain(config, admin).await?;
-            let items = client.outstanding_creditor_items_by_date(&end).await?;
-
-            let items: Vec<_> = items
-                .into_iter()
-                .filter(|i| i.date >= start && i.date <= end)
-                .collect();
+            let (client, entry) = setup_domain(config, admin).await?;
+            let items = client.outstanding_creditor_items(&entry.admin_id).await?;
 
             let headers = vec![
                 "Contact".into(),
@@ -90,26 +83,4 @@ pub async fn show(
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
-}
-
-/// Resolve an optional period string to (start_date, end_date).
-///
-/// Defaults to the current calendar year when no period is given.
-fn resolve_period(period: Option<&str>) -> Result<(String, String), YukiError> {
-    match period {
-        Some(p) => parse_period(p),
-        None => {
-            let year = current_year();
-            Ok((format!("{year}-01-01"), format!("{year}-12-31")))
-        }
-    }
-}
-
-fn current_year() -> u32 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    1970 + (secs / 31_557_600) as u32
 }

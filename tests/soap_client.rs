@@ -79,9 +79,11 @@ fn parses_administrations_response() {
         <Administrations xmlns="">
           <Administration ID="admin-001">
             <Name>Acme BV</Name>
+            <DomainID>domain-001</DomainID>
           </Administration>
           <Administration ID="admin-002">
             <Name>Widget Corp</Name>
+            <DomainID>domain-002</DomainID>
           </Administration>
         </Administrations>
       </AdministrationsResult>
@@ -93,8 +95,10 @@ fn parses_administrations_response() {
     assert_eq!(admins.len(), 2);
     assert_eq!(admins[0].id, "admin-001");
     assert_eq!(admins[0].name, "Acme BV");
+    assert_eq!(admins[0].domain_id, "domain-001");
     assert_eq!(admins[1].id, "admin-002");
     assert_eq!(admins[1].name, "Widget Corp");
+    assert_eq!(admins[1].domain_id, "domain-002");
 }
 
 #[test]

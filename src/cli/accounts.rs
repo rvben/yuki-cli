@@ -7,21 +7,19 @@ use crate::period::parse_period;
 pub async fn balance(
     config: &Config,
     admin: Option<&str>,
-    account: &str,
+    account: Option<&str>,
     period: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let (start, end) = resolve_period(period)?;
-    let client = setup_domain(config, admin).await?;
-    let balance = client.gl_account_balance(account, &start, &end).await?;
+    let (start, _end) = resolve_period(period)?;
+    let gl_code = account.unwrap_or("");
+    let (client, entry) = setup_domain(config, admin).await?;
+    let balance = client
+        .gl_account_balance(&entry.admin_id, gl_code, &start)
+        .await?;
 
-    let headers = vec![
-        "Account".into(),
-        "Start".into(),
-        "End".into(),
-        "Balance".into(),
-    ];
-    let rows = vec![vec![account.to_string(), start, end, balance]];
+    let headers = vec!["Account".into(), "Date".into(), "Balance".into()];
+    let rows = vec![vec![gl_code.to_string(), start, balance]];
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
@@ -34,14 +32,15 @@ pub async fn balance(
 pub async fn transactions(
     config: &Config,
     admin: Option<&str>,
-    account: &str,
+    account: Option<&str>,
     period: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
-    let client = setup_domain(config, admin).await?;
+    let gl_code = account.unwrap_or("");
+    let (client, entry) = setup_domain(config, admin).await?;
     let xml = client
-        .gl_account_transactions(account, &start, &end)
+        .gl_account_transactions(&entry.admin_id, gl_code, &start, &end)
         .await?;
 
     let headers = vec!["Raw XML".into()];
