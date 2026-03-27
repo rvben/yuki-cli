@@ -134,8 +134,7 @@ pub async fn exists(
     contact: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    // Search a month around the given date
-    let (search_start, search_end) = date_window(date, 30)?;
+    let (search_start, search_end, filter_start, filter_end) = date_range(date)?;
 
     let mut client = ArchiveClient::new();
     client.authenticate(&config.api_key).await?;
@@ -154,7 +153,7 @@ pub async fn exists(
                 .parse::<f64>()
                 .map(|a| (a - amount).abs() <= 0.01)
                 .unwrap_or(false);
-            let date_matches = within_days(&d.document_date, date, 7);
+            let date_matches = date_in_range(&d.document_date, &filter_start, &filter_end);
             amount_matches && date_matches
         })
         .collect();
@@ -203,41 +202,55 @@ fn current_year() -> u32 {
     1970 + (secs / 31_557_600) as u32
 }
 
-/// Build a search window of ±`days` around a YYYY-MM-DD date string.
-fn date_window(date: &str, days: i32) -> Result<(String, String), YukiError> {
+/// Build a search window and date filter from a date string.
+///
+/// Accepts YYYY-MM-DD (±7 day match), YYYY-MM (full month), or YYYY-QN / YYYY (via parse_period).
+/// Returns (search_start, search_end, filter_start, filter_end).
+fn date_range(date: &str) -> Result<(String, String, String, String), YukiError> {
     let parts: Vec<&str> = date.split('-').collect();
-    if parts.len() != 3 {
-        return Err(YukiError::Config(format!(
-            "invalid date format: '{date}', expected YYYY-MM-DD"
-        )));
+    match parts.len() {
+        3 => {
+            // YYYY-MM-DD: search ±1 month, filter ±7 days
+            let y: i32 = parts[0].parse().unwrap_or(0);
+            let m: i32 = parts[1].parse().unwrap_or(0);
+            let search_start = format!("{y:04}-{:02}-01", (m - 1).max(1));
+            let search_end = format!("{y:04}-{:02}-28", (m + 1).min(12));
+            let filter_start = shift_days(date, -7);
+            let filter_end = shift_days(date, 7);
+            Ok((search_start, search_end, filter_start, filter_end))
+        }
+        _ => {
+            // YYYY-MM, YYYY-QN, YYYY: use parse_period for both search and filter
+            let (start, end) = crate::period::parse_period(date)?;
+            Ok((start.clone(), end.clone(), start, end))
+        }
     }
-    let y: i32 = parts[0].parse().unwrap_or(0);
-    let m: i32 = parts[1].parse().unwrap_or(0);
-    let d: i32 = parts[2].parse().unwrap_or(0);
-
-    // Approximate: just shift the month for the window
-    let start_m = if d - days < 1 { m - 1 } else { m };
-    let end_m = if d + days > 28 { m + 1 } else { m };
-
-    let start = format!("{y:04}-{:02}-01", start_m.max(1));
-    let end = format!("{y:04}-{:02}-28", end_m.min(12));
-    Ok((start, end))
 }
 
-/// Check if two YYYY-MM-DD date strings are within `max_days` of each other.
-fn within_days(date_a: &str, date_b: &str, max_days: i32) -> bool {
-    let to_days = |s: &str| -> Option<i32> {
+/// Rough date shift by days on a YYYY-MM-DD string.
+fn shift_days(date: &str, days: i32) -> String {
+    let to_days = |s: &str| -> i32 {
         let p: Vec<&str> = s.split('-').collect();
         if p.len() < 3 {
-            return None;
+            return 0;
         }
-        let y: i32 = p[0].parse().ok()?;
-        let m: i32 = p[1].parse().ok()?;
-        let d: i32 = p[2].split('T').next()?.parse().ok()?;
-        Some(y * 365 + m * 30 + d)
+        let y: i32 = p[0].parse().unwrap_or(0);
+        let m: i32 = p[1].parse().unwrap_or(0);
+        let d: i32 = p[2].parse().unwrap_or(0);
+        y * 365 + m * 30 + d
     };
-    match (to_days(date_a), to_days(date_b)) {
-        (Some(a), Some(b)) => (a - b).abs() <= max_days,
-        _ => false,
-    }
+    let from_days = |total: i32| -> String {
+        let y = total / 365;
+        let rem = total % 365;
+        let m = (rem / 30).clamp(1, 12);
+        let d = (rem % 30).clamp(1, 28);
+        format!("{y:04}-{m:02}-{d:02}")
+    };
+    from_days(to_days(date) + days)
+}
+
+/// Check if a document date falls within a filter range.
+fn date_in_range(doc_date: &str, filter_start: &str, filter_end: &str) -> bool {
+    let normalized = doc_date.split('T').next().unwrap_or(doc_date);
+    normalized >= filter_start && normalized <= filter_end
 }
