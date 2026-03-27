@@ -34,8 +34,7 @@ impl Config {
     pub fn load_from(path: &Path) -> Result<Self, YukiError> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| YukiError::Config(format!("failed to read {}: {e}", path.display())))?;
-        toml::from_str(&content)
-            .map_err(|e| YukiError::Config(format!("invalid config: {e}")))
+        toml::from_str(&content).map_err(|e| YukiError::Config(format!("invalid config: {e}")))
     }
 
     pub fn save_to(&self, path: &Path) -> Result<(), YukiError> {
