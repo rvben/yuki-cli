@@ -231,11 +231,11 @@ fn parse_counterparty(description: &str) -> String {
         .to_string()
 }
 
-/// Find bank transactions on GL account 11001 that have no matching outstanding creditor item.
+/// Find bank transactions on GL account 11001 that have no matching invoice.
 ///
-/// Each bank debit (negative amount) is matched by absolute amount against the pool of
-/// outstanding creditor items. Debits that remain unmatched are reported as potentially
-/// missing invoices.
+/// Each bank debit (negative amount) is first matched by absolute amount against outstanding
+/// creditor items. Any remaining unmatched debits are then checked against booked invoices in
+/// the archive for the same period. Only transactions that match neither source are reported.
 pub async fn unmatched(
     config: &Config,
     admin: Option<&str>,
@@ -246,7 +246,7 @@ pub async fn unmatched(
     let (start, end) = resolve_period(period)?;
 
     if !quiet {
-        eprintln!("[1/2] Fetching bank transactions (GL 11001)...");
+        eprintln!("[1/3] Fetching bank transactions (GL 11001)...");
     }
     let mut accounting_client = AccountingClient::new();
     accounting_client.authenticate(&config.api_key).await?;
@@ -264,14 +264,21 @@ pub async fn unmatched(
     let transactions = AccountingClient::parse_gl_transactions(&raw)?;
 
     if !quiet {
-        eprintln!("[2/2] Fetching outstanding creditor items...");
+        eprintln!("[2/3] Fetching outstanding creditor items...");
     }
     let creditor_items = accounting_client
         .outstanding_creditor_items(&entry.admin_id)
         .await?;
 
     if !quiet {
-        eprintln!("API calls made: 3");
+        eprintln!("[3/3] Fetching booked invoices from archive...");
+    }
+    let mut archive_client = ArchiveClient::new();
+    archive_client.authenticate(&config.api_key).await?;
+    let archive_docs = archive_client.search_documents("", &start, &end).await?;
+
+    if !quiet {
+        eprintln!("API calls made: 4");
     }
 
     // Build a pool of creditor open amounts for single-pass matching.
@@ -281,6 +288,19 @@ pub async fn unmatched(
     for item in &creditor_items {
         let key = item.open_amount.trim().to_string();
         *creditor_pool.entry(key).or_insert(0) += 1;
+    }
+
+    // Build a pool of archive document amounts for matching booked invoices.
+    // Only positive amounts (purchase invoices) are relevant.
+    let mut archive_pool: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for doc in &archive_docs {
+        if let Ok(amt) = doc.amount.trim().parse::<f64>() {
+            if amt > 0.0 {
+                let key = format!("{amt:.2}");
+                *archive_pool.entry(key).or_insert(0) += 1;
+            }
+        }
     }
 
     let mut unmatched_rows: Vec<Vec<String>> = Vec::new();
@@ -293,12 +313,23 @@ pub async fn unmatched(
         }
         // Represent the absolute value as a rounded-cent string for matching.
         let abs_amount = format!("{:.2}", amount.abs());
+
+        // Check outstanding creditor items first.
         if let Some(count) = creditor_pool.get_mut(&abs_amount)
             && *count > 0
         {
             *count -= 1;
             continue;
         }
+
+        // Check booked invoices in the archive.
+        if let Some(count) = archive_pool.get_mut(&abs_amount)
+            && *count > 0
+        {
+            *count -= 1;
+            continue;
+        }
+
         let counterparty = parse_counterparty(&tx.description);
         unmatched_rows.push(vec![
             tx.date.clone(),
