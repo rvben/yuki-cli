@@ -22,6 +22,26 @@ fn safe_name(name: &str) -> String {
 
 pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(), YukiError> {
     let stdin = io::stdin();
+    let path = Config::default_path();
+
+    // If config exists and only --api-key is provided, update the key in place.
+    if let (Some(key), None) = (api_key, default_admin) {
+        if let Ok(mut config) = Config::load_from(&path) {
+            let key = key.trim().to_string();
+            if key.is_empty() {
+                return Err(YukiError::Config("API key cannot be empty".to_string()));
+            }
+
+            eprintln!("Verifying new API key...");
+            let mut client = AccountingClient::new();
+            client.authenticate(&key).await?;
+
+            config.api_key = key;
+            config.save_to(&path)?;
+            eprintln!("API key updated in {}", path.display());
+            return Ok(());
+        }
+    }
 
     let api_key = match api_key {
         Some(k) => k.trim().to_string(),
@@ -116,14 +136,18 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
         })
         .collect();
 
+    // Preserve unmatched_ignore from existing config if present.
+    let unmatched_ignore = Config::load_from(&path)
+        .map(|c| c.unmatched_ignore)
+        .unwrap_or_default();
+
     let config = Config {
         api_key,
         default_admin: default_name.clone(),
         administrations,
-        unmatched_ignore: Vec::new(),
+        unmatched_ignore,
     };
 
-    let path = Config::default_path();
     config.save_to(&path)?;
 
     eprintln!("Configuration saved to {}", path.display());
