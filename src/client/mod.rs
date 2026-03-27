@@ -1,5 +1,10 @@
 pub mod accounting;
+pub mod accounting_info;
+pub mod archive;
+pub mod contact;
+pub mod sales;
 pub mod soap_client;
+pub mod vat;
 
 pub use soap_client::{SoapClient, SoapEnvelope};
 
