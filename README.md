@@ -2,7 +2,7 @@
 
 CLI client for the [Yuki](https://www.yukiworks.nl) bookkeeping SOAP API.
 
-Query invoices, VAT returns, GL accounts, contacts, and projects. Find missing invoices by cross-referencing bank transactions against booked items. Upload documents with metadata.
+[Yuki](https://www.yukiworks.nl) is a Dutch bookkeeping SaaS used for accounting, VAT returns, and document archiving. This CLI lets you query your administration, find missing invoices, and upload documents — from the terminal or as part of automated workflows.
 
 ## Install
 
@@ -16,24 +16,51 @@ Or via pip:
 pip install yuki-cli
 ```
 
-From source:
-
-```sh
-make install
-```
+Both install the `yuki` binary.
 
 ## Setup
 
-```
+1. Get a Yuki API key from your Yuki portal under **Settings > API keys**.
+2. Run `yuki init` and paste your key when prompted. The CLI discovers your administrations and writes the config to `~/.config/yuki/config.toml`.
+
+```sh
 yuki init
 ```
 
-Prompts for your Yuki API key, discovers available administrations, and writes the config to `~/.config/yuki/config.toml`.
+Non-interactive (for scripting):
 
-Non-interactive setup:
-
-```
+```sh
 yuki init --api-key <key> --default-admin <name>
+```
+
+To rotate your API key later:
+
+```sh
+yuki init --api-key <new-key>
+```
+
+## Quick start: find missing invoices
+
+The main workflow is finding bank transactions that don't have a matching invoice in Yuki:
+
+```sh
+# Show bank debits without matching invoices for Q1 2025
+yuki check unmatched --period 2025-Q1
+```
+
+This cross-references bank transactions against outstanding creditor items, booked archive documents, and known counterparty names. The output shows unmatched transactions with their date, amount, counterparty, and description.
+
+For each unmatched item, you can check if the invoice is already in the archive, and upload it if not:
+
+```sh
+# Check if an invoice already exists
+yuki documents exists --amount 7.28 --date 2025-03
+
+# Upload an invoice (Yuki auto-sorts it)
+yuki upload file invoice.pdf
+
+# Or upload to a specific folder with metadata
+yuki upload file invoice.pdf --folder inkoop --amount 7.28 --remarks "Hetzner hosting"
 ```
 
 ## Commands
