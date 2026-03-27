@@ -1,5 +1,3 @@
-use std::process;
-
 use crate::client::archive::ArchiveClient;
 use crate::config::Config;
 use crate::error::YukiError;
@@ -118,14 +116,10 @@ pub async fn search(
     Ok(())
 }
 
-/// Check if an invoice exists in the archive by amount and optional contact name.
-///
-/// Searches the archive for documents in the given period, then filters by amount
-/// with a ±0.01 tolerance. Outputs matching documents and exits with code 3 if none found.
 /// Check if an invoice exists in the archive by amount and date (±7 days).
 ///
 /// Searches within a month around the given date, then filters by amount (±0.01)
-/// and date proximity (±7 days). Returns matching documents or exits with code 3.
+/// and date proximity (±7 days). Returns matching documents or exit code 3 if none found.
 pub async fn exists(
     config: &Config,
     _admin: Option<&str>,
@@ -187,7 +181,9 @@ pub async fn exists(
     }
 
     if rows.is_empty() {
-        process::exit(3);
+        return Err(YukiError::NotFound(
+            "no matching document found".to_string(),
+        ));
     }
 
     Ok(())

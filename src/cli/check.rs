@@ -18,7 +18,7 @@ pub async fn btw(
     let (start, end) = resolve_period(period)?;
 
     if !quiet {
-        eprintln!("[1/5] Fetching VAT return list...");
+        eprintln!("[1/3] Fetching VAT return list...");
     }
     let mut vat_client = VatClient::new();
     vat_client.authenticate(&config.api_key).await?;
@@ -26,37 +26,18 @@ pub async fn btw(
     let vat_returns = vat_client.vat_return_list(&entry.admin_id).await?;
 
     if !quiet {
-        eprintln!("[2/5] Fetching GL account transactions...");
-    }
-    let _transactions = accounting_client
-        .gl_account_transactions(&entry.admin_id, "", &start, &end)
-        .await?;
-
-    if !quiet {
-        eprintln!("[3/5] Fetching outstanding debtor items...");
+        eprintln!("[2/3] Fetching outstanding debtor items...");
     }
     let debtors = accounting_client
         .outstanding_debtor_items_by_date(&entry.admin_id, &start, &end)
         .await?;
 
     if !quiet {
-        eprintln!("[4/5] Fetching outstanding creditor items...");
+        eprintln!("[3/3] Fetching outstanding creditor items...");
     }
     let creditors = accounting_client
         .outstanding_creditor_items_by_date(&entry.admin_id, &start, &end)
         .await?;
-
-    if !quiet {
-        eprintln!("[5/5] Fetching modified documents...");
-    }
-    let mut archive_client = ArchiveClient::new();
-    archive_client.authenticate(&config.api_key).await?;
-    let _modified = archive_client.modified_documents_by_type(0, &start).await?;
-
-    if !quiet {
-        let api_calls = 5;
-        eprintln!("API calls made: {api_calls}");
-    }
 
     // Build report: VAT returns in period + outstanding items
     let headers = vec![

@@ -38,7 +38,7 @@ pub struct Cli {
     #[arg(long = "admin", global = true)]
     pub admin: Option<String>,
 
-    /// Output format: table, json, or csv.
+    /// Output format: table or json.
     #[arg(long, global = true)]
     pub format: Option<String>,
 

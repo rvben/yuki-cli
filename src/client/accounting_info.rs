@@ -176,23 +176,6 @@ impl AccountingInfoClient {
         Ok(details)
     }
 
-    /// Retrieve transactions for a GL account code over a date range.
-    pub async fn get_transactions(
-        &self,
-        gl_account_code: &str,
-        start: &str,
-        end: &str,
-    ) -> Result<String, YukiError> {
-        let session = self.require_session()?;
-        let envelope = SoapEnvelope::new("GetTransactions")
-            .session(session)
-            .param("glAccountCode", gl_account_code)
-            .param("startDate", start)
-            .param("endDate", end)
-            .build();
-        self.soap.call("GetTransactions", envelope).await
-    }
-
     /// Retrieve the full GL account scheme (chart of accounts).
     pub async fn get_gl_account_scheme(
         &self,

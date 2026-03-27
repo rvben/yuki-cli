@@ -2,8 +2,13 @@
 name = "yuki-cli"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.87"
 description = "CLI client for the Yuki bookkeeping SOAP API"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/rvben/yuki-cli"
+keywords = ["yuki", "bookkeeping", "soap", "accounting", "cli"]
+categories = ["command-line-utilities"]
 
 [lib]
 name = "yuki_cli"

@@ -190,59 +190,6 @@ impl SoapClient {
         )))
     }
 
-    /// Extract the inner XML content of the SOAP Body element.
-    pub fn parse_xml_body(xml: &str) -> Result<String, YukiError> {
-        let mut reader = Reader::from_str(xml);
-        reader.config_mut().trim_text(false);
-
-        let mut inside_body = false;
-        let mut depth: u32 = 0;
-        let mut body_content = String::new();
-        let mut buf = Vec::new();
-
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(ref e)) => {
-                    let name = e.name();
-                    let local = local_name(name.as_ref());
-                    if !inside_body && local == "Body" {
-                        inside_body = true;
-                        depth = 0;
-                    } else if inside_body {
-                        depth += 1;
-                        let tag = std::str::from_utf8(name.as_ref()).unwrap_or("");
-                        body_content.push('<');
-                        body_content.push_str(tag);
-                        body_content.push('>');
-                    }
-                }
-                Ok(Event::End(ref e)) => {
-                    let name = e.name();
-                    let local = local_name(name.as_ref());
-                    if inside_body && local == "Body" && depth == 0 {
-                        break;
-                    } else if inside_body {
-                        depth = depth.saturating_sub(1);
-                        let tag = std::str::from_utf8(name.as_ref()).unwrap_or("");
-                        body_content.push_str("</");
-                        body_content.push_str(tag);
-                        body_content.push('>');
-                    }
-                }
-                Ok(Event::Text(ref e)) if inside_body => {
-                    let text = e.unescape().map_err(|e| YukiError::Xml(e.to_string()))?;
-                    body_content.push_str(&text);
-                }
-                Ok(Event::Eof) => break,
-                Err(e) => return Err(YukiError::Xml(e.to_string())),
-                _ => {}
-            }
-            buf.clear();
-        }
-
-        Ok(body_content)
-    }
-
     /// Detect a SOAP fault in the response and return it as a `YukiError`.
     ///
     /// Returns `None` if no fault is present.

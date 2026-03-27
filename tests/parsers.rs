@@ -2,6 +2,8 @@ use yuki_cli::client::accounting::AccountingClient;
 use yuki_cli::client::accounting_info::AccountingInfoClient;
 use yuki_cli::client::archive::ArchiveClient;
 use yuki_cli::client::contact::parse_contacts;
+use yuki_cli::client::sales::SalesClient;
+use yuki_cli::client::vat::VatClient;
 
 #[test]
 fn parses_gl_transactions() {
@@ -119,6 +121,7 @@ fn parses_archive_documents() {
     assert_eq!(docs[0].subject, "Hetzner Invoice");
     assert_eq!(docs[0].document_date, "2025-03-01");
     assert_eq!(docs[0].amount, "7.28");
+    assert_eq!(docs[0].folder, "inkoop");
     assert_eq!(docs[0].contact_name, "Hetzner");
     assert_eq!(docs[0].file_name, "invoice.pdf");
     assert_eq!(docs[0].reference, "INV-2025-001");
@@ -250,4 +253,125 @@ fn parses_transaction_details() {
     assert_eq!(details[0].amount, "7.28");
     assert_eq!(details[0].currency, "EUR");
     assert_eq!(details[0].gl_account_code, "45100");
+}
+
+#[test]
+fn parses_vat_returns() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <VATReturnListResponse xmlns="http://www.theyukicompany.com/">
+      <VATReturnListResult>
+        <VATReturns xmlns="">
+          <VATReturnInfo>
+            <startDate>2025-01-01T00:00:00</startDate>
+            <endDate>2025-03-31T00:00:00</endDate>
+            <status>Filed</status>
+          </VATReturnInfo>
+          <VATReturnInfo>
+            <startDate>2025-04-01T00:00:00</startDate>
+            <endDate>2025-06-30T00:00:00</endDate>
+            <status>Open</status>
+          </VATReturnInfo>
+        </VATReturns>
+      </VATReturnListResult>
+    </VATReturnListResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let returns = VatClient::parse_vat_returns(xml).unwrap();
+    assert_eq!(returns.len(), 2);
+    assert_eq!(returns[0].start_date, "2025-01-01T00:00:00");
+    assert_eq!(returns[0].end_date, "2025-03-31T00:00:00");
+    assert_eq!(returns[0].status, "Filed");
+    assert_eq!(returns[0].period, "2025-01-01 - 2025-03-31");
+    assert_eq!(returns[1].status, "Open");
+    assert_eq!(returns[1].period, "2025-04-01 - 2025-06-30");
+}
+
+#[test]
+fn parses_vat_codes() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <ActiveVATCodesListResponse xmlns="http://www.theyukicompany.com/">
+      <ActiveVATCodesListResult>
+        <VATCodes xmlns="">
+          <VATCode>
+            <type>1</type>
+            <description>BTW 21%</description>
+          </VATCode>
+          <VATCode>
+            <type>2</type>
+            <description>BTW 9%</description>
+          </VATCode>
+        </VATCodes>
+      </ActiveVATCodesListResult>
+    </ActiveVATCodesListResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let codes = VatClient::parse_vat_codes(xml).unwrap();
+    assert_eq!(codes.len(), 2);
+    assert_eq!(codes[0].code, "1");
+    assert_eq!(codes[0].description, "BTW 21%");
+    assert_eq!(codes[1].code, "2");
+    assert_eq!(codes[1].description, "BTW 9%");
+}
+
+#[test]
+fn parses_sales_items() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetSalesItemsResponse xmlns="http://www.theyukicompany.com/">
+      <GetSalesItemsResult>
+        <SalesItems xmlns="">
+          <SalesItem>
+            <id>item-001</id>
+            <description>Consulting services</description>
+          </SalesItem>
+          <SalesItem>
+            <id>item-002</id>
+            <description>Software license</description>
+          </SalesItem>
+        </SalesItems>
+      </GetSalesItemsResult>
+    </GetSalesItemsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let items = SalesClient::parse_sales_items(xml).unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].id, "item-001");
+    assert_eq!(items[0].description, "Consulting services");
+    assert_eq!(items[1].id, "item-002");
+    assert_eq!(items[1].description, "Software license");
+}
+
+#[test]
+fn parses_outstanding_creditor_items() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <OutstandingCreditorItemsResponse xmlns="http://www.theyukicompany.com/">
+      <OutstandingCreditorItemsResult>
+        <Item>
+          <Contact>Supplier X</Contact>
+          <Description>Purchase order 42</Description>
+          <Date>2025-06-01</Date>
+          <OriginalAmount>250.00</OriginalAmount>
+          <OpenAmount>250.00</OpenAmount>
+        </Item>
+      </OutstandingCreditorItemsResult>
+    </OutstandingCreditorItemsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let items =
+        AccountingClient::parse_outstanding_items(xml, "OutstandingCreditorItemsResult").unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].contact_name, "Supplier X");
+    assert_eq!(items[0].amount, "250.00");
+    assert_eq!(items[0].open_amount, "250.00");
 }
