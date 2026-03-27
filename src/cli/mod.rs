@@ -153,6 +153,19 @@ pub enum DocumentCommands {
         /// Search query.
         query: String,
     },
+
+    /// Check if an invoice exists in the archive (by amount and optional contact name).
+    Exists {
+        /// Invoice amount to search for.
+        #[arg(long)]
+        amount: f64,
+        /// Contact/supplier name to narrow the search.
+        #[arg(long)]
+        contact: Option<String>,
+        /// Date range period (e.g. 2025-01).
+        #[arg(long)]
+        period: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -221,6 +234,9 @@ pub enum CheckCommands {
         /// Accounting period (e.g. 2025-Q1).
         #[arg(long)]
         period: Option<String>,
+        /// GL account code for the bank account (default: 11001).
+        #[arg(long, default_value = "11001")]
+        bank_account: String,
     },
 }
 

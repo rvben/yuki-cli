@@ -183,6 +183,21 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 DocumentCommands::Search { query } => {
                     yuki_cli::cli::documents::search(&config, admin, &query, format).await?;
                 }
+                DocumentCommands::Exists {
+                    amount,
+                    contact,
+                    period,
+                } => {
+                    yuki_cli::cli::documents::exists(
+                        &config,
+                        admin,
+                        amount,
+                        contact.as_deref(),
+                        period.as_deref(),
+                        format,
+                    )
+                    .await?;
+                }
             }
         }
 
@@ -194,11 +209,15 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     yuki_cli::cli::check::btw(&config, admin, period.as_deref(), format, cli.quiet)
                         .await?;
                 }
-                CheckCommands::Unmatched { period } => {
+                CheckCommands::Unmatched {
+                    period,
+                    bank_account,
+                } => {
                     yuki_cli::cli::check::unmatched(
                         &config,
                         admin,
                         period.as_deref(),
+                        &bank_account,
                         format,
                         cli.quiet,
                     )

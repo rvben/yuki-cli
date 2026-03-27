@@ -133,7 +133,7 @@ fn parse_counterparty(description: &str) -> String {
         .to_string()
 }
 
-/// Find bank transactions on GL account 11001 that have no matching invoice.
+/// Find bank transactions on a given GL account that have no matching invoice.
 ///
 /// Each bank debit (negative amount) is first matched by absolute amount against outstanding
 /// creditor items. Any remaining unmatched debits are then checked against booked invoices in
@@ -142,13 +142,14 @@ pub async fn unmatched(
     config: &Config,
     admin: Option<&str>,
     period: Option<&str>,
+    bank_account: &str,
     format: Option<&str>,
     quiet: bool,
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
 
     if !quiet {
-        eprintln!("[1/3] Fetching bank transactions (GL 11001)...");
+        eprintln!("[1/3] Fetching bank transactions (GL {bank_account})...");
     }
     let mut accounting_client = AccountingClient::new();
     accounting_client.authenticate(&config.api_key).await?;
@@ -161,7 +162,7 @@ pub async fn unmatched(
     };
 
     let raw = accounting_client
-        .gl_account_transactions(&entry.admin_id, "11001", &start, &end)
+        .gl_account_transactions(&entry.admin_id, bank_account, &start, &end)
         .await?;
     let transactions = AccountingClient::parse_gl_transactions(&raw)?;
 
@@ -234,6 +235,7 @@ pub async fn unmatched(
 
         let counterparty = parse_counterparty(&tx.description);
         unmatched_rows.push(vec![
+            tx.id.clone(),
             tx.date.clone(),
             format!("-{abs_amount}"),
             counterparty,
@@ -242,6 +244,7 @@ pub async fn unmatched(
     }
 
     let headers = vec![
+        "ID".into(),
         "Date".into(),
         "Amount".into(),
         "Counterparty".into(),
