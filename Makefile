@@ -1,10 +1,13 @@
-.PHONY: build test lint run clean check
+.PHONY: build release install test lint fmt run check clean
 
 build:
 	cargo build
 
 release:
 	cargo build --release
+
+install:
+	cargo install --path .
 
 test:
 	cargo test
