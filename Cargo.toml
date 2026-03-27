@@ -1,0 +1,24 @@
+[package]
+name = "yuki-cli"
+version = "0.1.0"
+edition = "2024"
+description = "CLI client for the Yuki bookkeeping SOAP API"
+
+[[bin]]
+name = "yuki"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+comfy-table = "7"
+quick-xml = { version = "0.37", features = ["serialize"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
