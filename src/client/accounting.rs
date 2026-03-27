@@ -1,0 +1,333 @@
+use quick_xml::Reader;
+use quick_xml::events::Event;
+
+use crate::error::YukiError;
+
+use super::local_name;
+use super::soap_client::{SoapClient, SoapEnvelope};
+
+const BASE_URL: &str = "https://api.yukiworks.nl/ws/Accounting.asmx";
+
+/// A Yuki administration (company entity).
+#[derive(Debug, Clone)]
+pub struct Administration {
+    pub id: String,
+    pub name: String,
+}
+
+/// An outstanding debtor or creditor item.
+#[derive(Debug, Clone)]
+pub struct OutstandingItem {
+    pub contact_name: String,
+    pub description: String,
+    pub date: String,
+    pub amount: String,
+    pub open_amount: String,
+}
+
+/// A general ledger transaction.
+#[derive(Debug, Clone)]
+pub struct GlTransaction {
+    pub date: String,
+    pub description: String,
+    pub gl_account: String,
+    pub amount: String,
+}
+
+/// Client for the Yuki Accounting SOAP service.
+pub struct AccountingClient {
+    soap: SoapClient,
+}
+
+impl AccountingClient {
+    pub fn new() -> Self {
+        Self {
+            soap: SoapClient::new(BASE_URL),
+        }
+    }
+
+    fn require_session(&self) -> Result<&str, YukiError> {
+        self.soap.session_id().ok_or_else(|| {
+            YukiError::AuthFailed("not authenticated — call authenticate() first".to_string())
+        })
+    }
+
+    /// Authenticate with the Yuki API and store the session ID.
+    pub async fn authenticate(&mut self, api_key: &str) -> Result<String, YukiError> {
+        self.soap.authenticate(api_key).await
+    }
+
+    /// List all administrations accessible with the current session.
+    pub async fn administrations(&self) -> Result<Vec<Administration>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("Administrations")
+            .session(session)
+            .build();
+        let body = self.soap.call("Administrations", envelope).await?;
+        Self::parse_administrations(&body)
+    }
+
+    /// Set the active domain (administration) for subsequent calls.
+    pub async fn set_current_domain(&mut self, domain_id: &str) -> Result<(), YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("SetCurrentDomain")
+            .session(session)
+            .param("domainId", domain_id)
+            .build();
+        self.soap.call("SetCurrentDomain", envelope).await?;
+        Ok(())
+    }
+
+    /// Retrieve the balance of a GL account for a given period.
+    pub async fn gl_account_balance(
+        &self,
+        gl_account_code: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<String, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GLAccountBalance")
+            .session(session)
+            .param("glAccountCode", gl_account_code)
+            .param("startDate", start_date)
+            .param("endDate", end_date)
+            .build();
+        let body = self.soap.call("GLAccountBalance", envelope).await?;
+        SoapClient::parse_single_result(&body, "GLAccountBalanceResult")
+    }
+
+    /// Retrieve transactions for a GL account over a date range.
+    pub async fn gl_account_transactions(
+        &self,
+        gl_account_code: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<String, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GLAccountTransactions")
+            .session(session)
+            .param("glAccountCode", gl_account_code)
+            .param("startDate", start_date)
+            .param("endDate", end_date)
+            .build();
+        self.soap.call("GLAccountTransactions", envelope).await
+    }
+
+    /// Retrieve outstanding debtor items.
+    pub async fn outstanding_debtor_items(&self) -> Result<Vec<OutstandingItem>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("OutstandingDebtorItems")
+            .session(session)
+            .build();
+        let body = self.soap.call("OutstandingDebtorItems", envelope).await?;
+        Self::parse_outstanding_items(&body, "OutstandingDebtorItemsResult")
+    }
+
+    /// Retrieve outstanding debtor items filtered by date.
+    pub async fn outstanding_debtor_items_by_date(
+        &self,
+        reference_date: &str,
+    ) -> Result<Vec<OutstandingItem>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("OutstandingDebtorItemsByDate")
+            .session(session)
+            .param("referenceDate", reference_date)
+            .build();
+        let body = self
+            .soap
+            .call("OutstandingDebtorItemsByDate", envelope)
+            .await?;
+        Self::parse_outstanding_items(&body, "OutstandingDebtorItemsByDateResult")
+    }
+
+    /// Retrieve outstanding creditor items.
+    pub async fn outstanding_creditor_items(&self) -> Result<Vec<OutstandingItem>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("OutstandingCreditorItems")
+            .session(session)
+            .build();
+        let body = self.soap.call("OutstandingCreditorItems", envelope).await?;
+        Self::parse_outstanding_items(&body, "OutstandingCreditorItemsResult")
+    }
+
+    /// Retrieve outstanding creditor items filtered by date.
+    pub async fn outstanding_creditor_items_by_date(
+        &self,
+        reference_date: &str,
+    ) -> Result<Vec<OutstandingItem>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("OutstandingCreditorItemsByDate")
+            .session(session)
+            .param("referenceDate", reference_date)
+            .build();
+        let body = self
+            .soap
+            .call("OutstandingCreditorItemsByDate", envelope)
+            .await?;
+        Self::parse_outstanding_items(&body, "OutstandingCreditorItemsByDateResult")
+    }
+
+    /// Parse an Administrations SOAP response into a list of `Administration` values.
+    pub fn parse_administrations(xml: &str) -> Result<Vec<Administration>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut administrations = Vec::new();
+        let mut current_id = String::new();
+        let mut current_name = String::new();
+        let mut in_administration = false;
+        let mut in_id = false;
+        let mut in_name = false;
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Administration" => {
+                            in_administration = true;
+                            current_id.clear();
+                            current_name.clear();
+                        }
+                        "ID" if in_administration => in_id = true,
+                        "Name" if in_administration => in_name = true,
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    let text = e
+                        .unescape()
+                        .map_err(|e| YukiError::Xml(e.to_string()))?
+                        .trim()
+                        .to_string();
+                    if in_id {
+                        current_id = text;
+                    } else if in_name {
+                        current_name = text;
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "ID" => in_id = false,
+                        "Name" => in_name = false,
+                        "Administration" => {
+                            if !current_id.is_empty() {
+                                administrations.push(Administration {
+                                    id: current_id.clone(),
+                                    name: current_name.clone(),
+                                });
+                            }
+                            in_administration = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(administrations)
+    }
+
+    /// Parse an outstanding items SOAP response into a list of `OutstandingItem` values.
+    ///
+    /// The `result_tag` identifies the wrapper element in the response
+    /// (e.g. `"OutstandingDebtorItemsResult"`).
+    pub fn parse_outstanding_items(
+        xml: &str,
+        result_tag: &str,
+    ) -> Result<Vec<OutstandingItem>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut items = Vec::new();
+        let mut in_result = false;
+        let mut in_item = false;
+        let mut field: Option<String> = None;
+        let mut current = OutstandingItem {
+            contact_name: String::new(),
+            description: String::new(),
+            date: String::new(),
+            amount: String::new(),
+            open_amount: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        tag if tag == result_tag => in_result = true,
+                        "Item" if in_result => {
+                            in_item = true;
+                            current = OutstandingItem {
+                                contact_name: String::new(),
+                                description: String::new(),
+                                date: String::new(),
+                                amount: String::new(),
+                                open_amount: String::new(),
+                            };
+                        }
+                        "ContactName" | "Description" | "Date" | "Amount" | "OpenAmount"
+                            if in_item =>
+                        {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "ContactName" => current.contact_name = text,
+                            "Description" => current.description = text,
+                            "Date" => current.date = text,
+                            "Amount" => current.amount = text,
+                            "OpenAmount" => current.open_amount = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "ContactName" | "Description" | "Date" | "Amount" | "OpenAmount" => {
+                            field = None;
+                        }
+                        "Item" if in_item => {
+                            items.push(current.clone());
+                            in_item = false;
+                        }
+                        tag if tag == result_tag => {
+                            in_result = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(items)
+    }
+}
+
+impl Default for AccountingClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}

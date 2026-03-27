@@ -1,3 +1,4 @@
+use yuki_cli::client::accounting::AccountingClient;
 use yuki_cli::client::{SoapClient, SoapEnvelope};
 
 #[test]
@@ -64,4 +65,63 @@ fn parses_soap_fault() {
 fn soap_action_header_format() {
     let action = SoapClient::soap_action("Accounting", "GLAccountBalance");
     assert_eq!(action, "http://www.theyukicompany.com/GLAccountBalance");
+}
+
+#[test]
+fn parses_administrations_response() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soap:Body>
+    <AdministrationsResponse xmlns="http://www.theyukicompany.com/">
+      <AdministrationsResult>
+        <Administration>
+          <ID>admin-001</ID>
+          <Name>Acme BV</Name>
+        </Administration>
+        <Administration>
+          <ID>admin-002</ID>
+          <Name>Widget Corp</Name>
+        </Administration>
+      </AdministrationsResult>
+    </AdministrationsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let admins = AccountingClient::parse_administrations(xml).unwrap();
+    assert_eq!(admins.len(), 2);
+    assert_eq!(admins[0].id, "admin-001");
+    assert_eq!(admins[0].name, "Acme BV");
+    assert_eq!(admins[1].id, "admin-002");
+    assert_eq!(admins[1].name, "Widget Corp");
+}
+
+#[test]
+fn parses_outstanding_debtor_items() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soap:Body>
+    <OutstandingDebtorItemsResponse xmlns="http://www.theyukicompany.com/">
+      <OutstandingDebtorItemsResult>
+        <Item>
+          <ContactName>Customer A</ContactName>
+          <Description>Invoice 2025-001</Description>
+          <Date>2025-03-01</Date>
+          <Amount>1000.00</Amount>
+          <OpenAmount>500.00</OpenAmount>
+        </Item>
+      </OutstandingDebtorItemsResult>
+    </OutstandingDebtorItemsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let items =
+        AccountingClient::parse_outstanding_items(xml, "OutstandingDebtorItemsResult").unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].contact_name, "Customer A");
+    assert_eq!(items[0].description, "Invoice 2025-001");
+    assert_eq!(items[0].date, "2025-03-01");
+    assert_eq!(items[0].amount, "1000.00");
+    assert_eq!(items[0].open_amount, "500.00");
 }
