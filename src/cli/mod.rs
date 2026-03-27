@@ -1,4 +1,29 @@
+pub mod accounts;
+pub mod admin;
+pub mod check;
+pub mod contacts;
+pub mod documents;
+pub mod init;
+pub mod invoices;
+pub mod vat;
+
 use clap::{Parser, Subcommand};
+
+use crate::client::accounting::AccountingClient;
+use crate::config::Config;
+use crate::error::YukiError;
+
+/// Authenticate a client and set the active administration domain.
+pub async fn setup_domain(
+    config: &Config,
+    admin: Option<&str>,
+) -> Result<AccountingClient, YukiError> {
+    let admin_id = config.resolve_admin(admin)?;
+    let mut client = AccountingClient::new();
+    client.authenticate(&config.api_key).await?;
+    client.set_current_domain(&admin_id).await?;
+    Ok(client)
+}
 
 /// Top-level CLI entry point for the Yuki bookkeeping API client.
 #[derive(Parser)]
