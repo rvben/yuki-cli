@@ -154,17 +154,17 @@ pub enum DocumentCommands {
         query: String,
     },
 
-    /// Check if an invoice exists in the archive (by amount and optional contact name).
+    /// Check if an invoice exists in the archive (by amount, date, and optional contact).
     Exists {
         /// Invoice amount to search for.
         #[arg(long)]
         amount: f64,
+        /// Invoice date (YYYY-MM-DD). Matches within ±7 days.
+        #[arg(long)]
+        date: String,
         /// Contact/supplier name to narrow the search.
         #[arg(long)]
         contact: Option<String>,
-        /// Date range period (e.g. 2025-01).
-        #[arg(long)]
-        period: Option<String>,
     },
 }
 

@@ -122,34 +122,40 @@ pub async fn search(
 ///
 /// Searches the archive for documents in the given period, then filters by amount
 /// with a ±0.01 tolerance. Outputs matching documents and exits with code 3 if none found.
+/// Check if an invoice exists in the archive by amount and date (±7 days).
+///
+/// Searches within a month around the given date, then filters by amount (±0.01)
+/// and date proximity (±7 days). Returns matching documents or exits with code 3.
 pub async fn exists(
     config: &Config,
     _admin: Option<&str>,
     amount: f64,
+    date: &str,
     contact: Option<&str>,
-    period: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let year = current_year();
-    let (start, end) = match period {
-        Some(p) => crate::period::parse_period(p)?,
-        None => (format!("{year}-01-01"), format!("{year}-12-31")),
-    };
+    // Search a month around the given date
+    let (search_start, search_end) = date_window(date, 30)?;
 
     let mut client = ArchiveClient::new();
     client.authenticate(&config.api_key).await?;
 
     let search_text = contact.unwrap_or("");
-    let docs = client.search_documents(search_text, &start, &end).await?;
+    let docs = client
+        .search_documents(search_text, &search_start, &search_end)
+        .await?;
 
     let matched: Vec<_> = docs
         .into_iter()
         .filter(|d| {
-            d.amount
+            let amount_matches = d
+                .amount
                 .trim()
                 .parse::<f64>()
                 .map(|a| (a - amount).abs() <= 0.01)
-                .unwrap_or(false)
+                .unwrap_or(false);
+            let date_matches = within_days(&d.document_date, date, 7);
+            amount_matches && date_matches
         })
         .collect();
 
@@ -195,4 +201,43 @@ fn current_year() -> u32 {
         .unwrap_or_default()
         .as_secs();
     1970 + (secs / 31_557_600) as u32
+}
+
+/// Build a search window of ±`days` around a YYYY-MM-DD date string.
+fn date_window(date: &str, days: i32) -> Result<(String, String), YukiError> {
+    let parts: Vec<&str> = date.split('-').collect();
+    if parts.len() != 3 {
+        return Err(YukiError::Config(format!(
+            "invalid date format: '{date}', expected YYYY-MM-DD"
+        )));
+    }
+    let y: i32 = parts[0].parse().unwrap_or(0);
+    let m: i32 = parts[1].parse().unwrap_or(0);
+    let d: i32 = parts[2].parse().unwrap_or(0);
+
+    // Approximate: just shift the month for the window
+    let start_m = if d - days < 1 { m - 1 } else { m };
+    let end_m = if d + days > 28 { m + 1 } else { m };
+
+    let start = format!("{y:04}-{:02}-01", start_m.max(1));
+    let end = format!("{y:04}-{:02}-28", end_m.min(12));
+    Ok((start, end))
+}
+
+/// Check if two YYYY-MM-DD date strings are within `max_days` of each other.
+fn within_days(date_a: &str, date_b: &str, max_days: i32) -> bool {
+    let to_days = |s: &str| -> Option<i32> {
+        let p: Vec<&str> = s.split('-').collect();
+        if p.len() < 3 {
+            return None;
+        }
+        let y: i32 = p[0].parse().ok()?;
+        let m: i32 = p[1].parse().ok()?;
+        let d: i32 = p[2].split('T').next()?.parse().ok()?;
+        Some(y * 365 + m * 30 + d)
+    };
+    match (to_days(date_a), to_days(date_b)) {
+        (Some(a), Some(b)) => (a - b).abs() <= max_days,
+        _ => false,
+    }
 }

@@ -185,15 +185,15 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
                 DocumentCommands::Exists {
                     amount,
+                    date,
                     contact,
-                    period,
                 } => {
                     yuki_cli::cli::documents::exists(
                         &config,
                         admin,
                         amount,
+                        &date,
                         contact.as_deref(),
-                        period.as_deref(),
                         format,
                     )
                     .await?;
