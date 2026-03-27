@@ -237,8 +237,8 @@ pub enum UploadCommands {
         /// Path to the file to upload.
         file: String,
 
-        /// Target folder (inkoop, verkoop, bank, personeel, belasting, uitzoeken, overig-financieel).
-        #[arg(long, default_value = "inkoop")]
+        /// Target folder: uitzoeken (default), inkoop, verkoop, bank, personeel, belasting, overig-financieel.
+        #[arg(long, default_value = "uitzoeken")]
         folder: String,
 
         /// Invoice amount (e.g. 114.27); enables richer metadata upload.
