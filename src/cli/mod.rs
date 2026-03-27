@@ -32,7 +32,11 @@ pub async fn setup_domain(
 
 /// Top-level CLI entry point for the Yuki bookkeeping API client.
 #[derive(Parser)]
-#[command(name = "yuki", about = "CLI client for the Yuki bookkeeping API")]
+#[command(
+    name = "yuki",
+    version,
+    about = "CLI client for the Yuki bookkeeping API"
+)]
 pub struct Cli {
     /// Override the active administration by name.
     #[arg(long = "admin", global = true)]
