@@ -3,6 +3,7 @@ name = "yuki-cli"
 version = "0.1.0"
 edition = "2024"
 description = "CLI client for the Yuki bookkeeping SOAP API"
+license = "MIT"
 
 [lib]
 name = "yuki_cli"
