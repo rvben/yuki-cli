@@ -295,11 +295,11 @@ pub async fn unmatched(
     let mut archive_pool: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
     for doc in &archive_docs {
-        if let Ok(amt) = doc.amount.trim().parse::<f64>() {
-            if amt > 0.0 {
-                let key = format!("{amt:.2}");
-                *archive_pool.entry(key).or_insert(0) += 1;
-            }
+        if let Ok(amt) = doc.amount.trim().parse::<f64>()
+            && amt > 0.0
+        {
+            let key = format!("{amt:.2}");
+            *archive_pool.entry(key).or_insert(0) += 1;
         }
     }
 
