@@ -1,0 +1,253 @@
+use yuki_cli::client::accounting::AccountingClient;
+use yuki_cli::client::accounting_info::AccountingInfoClient;
+use yuki_cli::client::archive::ArchiveClient;
+use yuki_cli::client::contact::parse_contacts;
+
+#[test]
+fn parses_gl_transactions() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GLAccountTransactionsResponse xmlns="http://www.theyukicompany.com/">
+      <GLAccountTransactionsResult>
+        <GLAccountTransactions xmlns="">
+          <GLAccountTransaction ID="tx-001">
+            <Date>2025-03-15</Date>
+            <Description>Payment received</Description>
+            <Amount>500.00</Amount>
+            <GLAccountCode>11001</GLAccountCode>
+          </GLAccountTransaction>
+          <GLAccountTransaction ID="tx-002">
+            <Date>2025-03-20</Date>
+            <Description>Invoice payment</Description>
+            <Amount>-125.50</Amount>
+            <GLAccountCode>11001</GLAccountCode>
+          </GLAccountTransaction>
+        </GLAccountTransactions>
+      </GLAccountTransactionsResult>
+    </GLAccountTransactionsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let txs = AccountingClient::parse_gl_transactions(xml).unwrap();
+    assert_eq!(txs.len(), 2);
+    assert_eq!(txs[0].id, "tx-001");
+    assert_eq!(txs[0].date, "2025-03-15");
+    assert_eq!(txs[0].description, "Payment received");
+    assert_eq!(txs[0].amount, "500.00");
+    assert_eq!(txs[0].gl_account, "11001");
+    assert_eq!(txs[1].id, "tx-002");
+    assert_eq!(txs[1].amount, "-125.50");
+}
+
+#[test]
+fn parses_gl_transactions_empty() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GLAccountTransactionsResponse xmlns="http://www.theyukicompany.com/">
+      <GLAccountTransactionsResult />
+    </GLAccountTransactionsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let txs = AccountingClient::parse_gl_transactions(xml).unwrap();
+    assert!(txs.is_empty());
+}
+
+#[test]
+fn parses_gl_transactions_with_contact() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GLAccountTransactionsAndContactResponse xmlns="http://www.theyukicompany.com/">
+      <GLAccountTransactionsAndContactResult>
+        <GLAccountTransactions xmlns="">
+          <GLAccountTransaction ID="tx-001">
+            <Date>2025-03-15</Date>
+            <Description>Hetzner hosting</Description>
+            <Amount>-7.28</Amount>
+            <GLAccountCode>11001</GLAccountCode>
+            <ContactName>Hetzner Online GmbH</ContactName>
+          </GLAccountTransaction>
+          <GLAccountTransaction ID="tx-002">
+            <Date>2025-03-20</Date>
+            <Description>Unknown debit</Description>
+            <Amount>-50.00</Amount>
+            <GLAccountCode>11001</GLAccountCode>
+          </GLAccountTransaction>
+        </GLAccountTransactions>
+      </GLAccountTransactionsAndContactResult>
+    </GLAccountTransactionsAndContactResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let txs = AccountingClient::parse_gl_transactions_with_contact(xml).unwrap();
+    assert_eq!(txs.len(), 2);
+    assert_eq!(txs[0].id, "tx-001");
+    assert_eq!(txs[0].contact_name, "Hetzner Online GmbH");
+    assert_eq!(txs[0].amount, "-7.28");
+    assert_eq!(txs[1].contact_name, "");
+}
+
+#[test]
+fn parses_archive_documents() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <SearchDocumentsResponse xmlns="http://www.theyukicompany.com/">
+      <SearchDocumentsResult>
+        <Documents xmlns="">
+          <Document ID="doc-001">
+            <Subject>Hetzner Invoice</Subject>
+            <DocumentDate>2025-03-01</DocumentDate>
+            <Amount>7.28</Amount>
+            <Folder>inkoop</Folder>
+            <ContactName>Hetzner</ContactName>
+            <FileName>invoice.pdf</FileName>
+            <Reference>INV-2025-001</Reference>
+          </Document>
+        </Documents>
+      </SearchDocumentsResult>
+    </SearchDocumentsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let docs = ArchiveClient::parse_archive_documents(xml).unwrap();
+    assert_eq!(docs.len(), 1);
+    assert_eq!(docs[0].id, "doc-001");
+    assert_eq!(docs[0].subject, "Hetzner Invoice");
+    assert_eq!(docs[0].document_date, "2025-03-01");
+    assert_eq!(docs[0].amount, "7.28");
+    assert_eq!(docs[0].contact_name, "Hetzner");
+    assert_eq!(docs[0].file_name, "invoice.pdf");
+    assert_eq!(docs[0].reference, "INV-2025-001");
+}
+
+#[test]
+fn parses_contacts() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <SearchContactsResponse xmlns="http://www.theyukicompany.com/">
+      <SearchContactsResult>
+        <Contacts xmlns="">
+          <Contact ID="contact-001">
+            <Name>Hetzner Online GmbH</Name>
+            <Type>Supplier</Type>
+            <Country>DE</Country>
+            <IsSupplier>true</IsSupplier>
+            <IsCustomer>false</IsCustomer>
+          </Contact>
+          <Contact ID="contact-002">
+            <Name>Customer B.V.</Name>
+            <Type>Customer</Type>
+            <Country>NL</Country>
+            <IsSupplier>false</IsSupplier>
+            <IsCustomer>true</IsCustomer>
+          </Contact>
+        </Contacts>
+      </SearchContactsResult>
+    </SearchContactsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let contacts = parse_contacts(xml).unwrap();
+    assert_eq!(contacts.len(), 2);
+    assert_eq!(contacts[0].id, "contact-001");
+    assert_eq!(contacts[0].name, "Hetzner Online GmbH");
+    assert_eq!(contacts[0].contact_type, "Supplier");
+    assert_eq!(contacts[0].country, "DE");
+    assert!(contacts[0].is_supplier);
+    assert!(!contacts[0].is_customer);
+    assert_eq!(contacts[1].id, "contact-002");
+    assert!(contacts[1].is_customer);
+    assert!(!contacts[1].is_supplier);
+}
+
+#[test]
+fn parses_cost_categories() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <CostCategoriesResponse xmlns="http://www.theyukicompany.com/">
+      <CostCategoriesResult>
+        <CostCategories xmlns="">
+          <CostCategory ID="45100">
+            <Description>Kantoorkosten</Description>
+          </CostCategory>
+          <CostCategory ID="45200">
+            <Description>Reis- en verblijfkosten</Description>
+          </CostCategory>
+        </CostCategories>
+      </CostCategoriesResult>
+    </CostCategoriesResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let cats = ArchiveClient::parse_cost_categories(xml).unwrap();
+    assert_eq!(cats.len(), 2);
+    assert_eq!(cats[0].id, "45100");
+    assert_eq!(cats[0].description, "Kantoorkosten");
+    assert_eq!(cats[1].id, "45200");
+}
+
+#[test]
+fn parses_payment_methods() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <PaymentMethodsResponse xmlns="http://www.theyukicompany.com/">
+      <PaymentMethodsResult>
+        <PaymentMethods xmlns="">
+          <PaymentMethod ID="1">
+            <Description>Contant</Description>
+          </PaymentMethod>
+          <PaymentMethod ID="4">
+            <Description>Pinpas</Description>
+          </PaymentMethod>
+        </PaymentMethods>
+      </PaymentMethodsResult>
+    </PaymentMethodsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let methods = ArchiveClient::parse_payment_methods(xml).unwrap();
+    assert_eq!(methods.len(), 2);
+    assert_eq!(methods[0].id, "1");
+    assert_eq!(methods[0].description, "Contant");
+    assert_eq!(methods[1].id, "4");
+    assert_eq!(methods[1].description, "Pinpas");
+}
+
+#[test]
+fn parses_transaction_details() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetTransactionDetailsResponse xmlns="http://www.theyukicompany.com/">
+      <GetTransactionDetailsResult>
+        <TransactionDetails xmlns="">
+          <TransactionInfo>
+            <id>detail-001</id>
+            <transactionDate>2025-03-15</transactionDate>
+            <description>Hosting fee</description>
+            <transactionAmount>7.28</transactionAmount>
+            <currency>EUR</currency>
+            <glAccountCode>45100</glAccountCode>
+          </TransactionInfo>
+        </TransactionDetails>
+      </GetTransactionDetailsResult>
+    </GetTransactionDetailsResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let details = AccountingInfoClient::parse_transaction_details(xml).unwrap();
+    assert_eq!(details.len(), 1);
+    assert_eq!(details[0].id, "detail-001");
+    assert_eq!(details[0].date, "2025-03-15");
+    assert_eq!(details[0].description, "Hosting fee");
+    assert_eq!(details[0].amount, "7.28");
+    assert_eq!(details[0].currency, "EUR");
+    assert_eq!(details[0].gl_account_code, "45100");
+}

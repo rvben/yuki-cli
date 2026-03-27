@@ -98,6 +98,55 @@ pub async fn scheme(
     Ok(())
 }
 
+pub async fn start_balance(
+    config: &Config,
+    admin: Option<&str>,
+    year: Option<&str>,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let bookyear = year.unwrap_or(&current_year().to_string()).to_string();
+    let entry = config.resolve_admin(admin)?;
+    let mut client = AccountingInfoClient::new();
+    client.authenticate(&config.api_key).await?;
+    let balances = client
+        .get_start_balance_by_gl_account(&entry.admin_id, &bookyear)
+        .await?;
+
+    let headers = vec!["GL Account".into(), "Description".into(), "Balance".into()];
+    let rows: Vec<Vec<String>> = balances
+        .into_iter()
+        .map(|b| vec![b.gl_account_code, b.description, b.balance])
+        .collect();
+
+    let fmt = OutputFormat::from_flag(format, is_tty());
+    match fmt {
+        OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
+        OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
+    }
+    Ok(())
+}
+
+pub async fn revenue(
+    config: &Config,
+    admin: Option<&str>,
+    period: Option<&str>,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let (start, end) = resolve_period(period)?;
+    let (client, entry) = setup_domain(config, admin).await?;
+    let amount = client.net_revenue(&entry.admin_id, &start, &end).await?;
+
+    let headers = vec!["Period".into(), "Net Revenue".into()];
+    let rows = vec![vec![format!("{start} — {end}"), amount]];
+
+    let fmt = OutputFormat::from_flag(format, is_tty());
+    match fmt {
+        OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
+        OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
+    }
+    Ok(())
+}
+
 /// Resolve an optional period string to (start_date, end_date).
 ///
 /// When no period is given, defaults to the current calendar year.

@@ -140,3 +140,41 @@ pub async fn payment_methods(config: &Config, format: Option<&str>) -> Result<()
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn folder_id_inkoop() {
+        assert_eq!(folder_id("inkoop").unwrap(), 1);
+        assert_eq!(folder_id("purchase").unwrap(), 1);
+    }
+
+    #[test]
+    fn folder_id_verkoop() {
+        assert_eq!(folder_id("verkoop").unwrap(), 2);
+        assert_eq!(folder_id("sales").unwrap(), 2);
+    }
+
+    #[test]
+    fn folder_id_uitzoeken_default() {
+        assert_eq!(folder_id("uitzoeken").unwrap(), 7);
+    }
+
+    #[test]
+    fn folder_id_all_known() {
+        assert_eq!(folder_id("bank").unwrap(), 3);
+        assert_eq!(folder_id("personeel").unwrap(), 4);
+        assert_eq!(folder_id("personnel").unwrap(), 4);
+        assert_eq!(folder_id("belasting").unwrap(), 5);
+        assert_eq!(folder_id("tax").unwrap(), 5);
+        assert_eq!(folder_id("overig-financieel").unwrap(), 8);
+        assert_eq!(folder_id("other").unwrap(), 8);
+    }
+
+    #[test]
+    fn folder_id_unknown_errors() {
+        assert!(folder_id("nonexistent").is_err());
+    }
+}

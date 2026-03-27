@@ -254,3 +254,83 @@ fn date_in_range(doc_date: &str, filter_start: &str, filter_end: &str) -> bool {
     let normalized = doc_date.split('T').next().unwrap_or(doc_date);
     normalized >= filter_start && normalized <= filter_end
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn date_range_exact_date() {
+        let (ss, se, fs, fe) = date_range("2025-03-15").unwrap();
+        // Search window: ±1 month
+        assert_eq!(ss, "2025-02-01");
+        assert_eq!(se, "2025-04-28");
+        // Filter: ±7 days
+        assert!(fs.as_str() <= "2025-03-08");
+        assert!(fe.as_str() >= "2025-03-22");
+    }
+
+    #[test]
+    fn date_range_month_period() {
+        let (ss, se, fs, fe) = date_range("2025-03").unwrap();
+        assert_eq!(ss, "2025-03-01");
+        assert_eq!(se, "2025-03-31");
+        assert_eq!(fs, ss);
+        assert_eq!(fe, se);
+    }
+
+    #[test]
+    fn date_range_quarter_period() {
+        let (ss, se, fs, fe) = date_range("2025-Q1").unwrap();
+        assert_eq!(ss, "2025-01-01");
+        assert_eq!(se, "2025-03-31");
+        assert_eq!(fs, ss);
+        assert_eq!(fe, se);
+    }
+
+    #[test]
+    fn date_range_year_period() {
+        let (ss, se, fs, fe) = date_range("2025").unwrap();
+        assert_eq!(ss, "2025-01-01");
+        assert_eq!(se, "2025-12-31");
+        assert_eq!(fs, ss);
+        assert_eq!(fe, se);
+    }
+
+    #[test]
+    fn date_in_range_within() {
+        assert!(date_in_range("2025-03-15", "2025-03-01", "2025-03-31"));
+    }
+
+    #[test]
+    fn date_in_range_strips_time() {
+        assert!(date_in_range(
+            "2025-03-15T10:30:00",
+            "2025-03-01",
+            "2025-03-31"
+        ));
+    }
+
+    #[test]
+    fn date_in_range_outside() {
+        assert!(!date_in_range("2025-04-01", "2025-03-01", "2025-03-31"));
+    }
+
+    #[test]
+    fn date_in_range_boundaries() {
+        assert!(date_in_range("2025-03-01", "2025-03-01", "2025-03-31"));
+        assert!(date_in_range("2025-03-31", "2025-03-01", "2025-03-31"));
+    }
+
+    #[test]
+    fn shift_days_forward() {
+        let result = shift_days("2025-03-15", 7);
+        assert!(result.as_str() > "2025-03-15");
+    }
+
+    #[test]
+    fn shift_days_backward() {
+        let result = shift_days("2025-03-15", -7);
+        assert!(result.as_str() < "2025-03-15");
+    }
+}

@@ -220,6 +220,24 @@ impl AccountingClient {
         Self::parse_gl_transactions_with_contact(&body)
     }
 
+    /// Retrieve net revenue for a date range.
+    pub async fn net_revenue(
+        &self,
+        administration_id: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<String, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("NetRevenue")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("StartDate", start_date)
+            .param("EndDate", end_date)
+            .build();
+        let body = self.soap.call("NetRevenue", envelope).await?;
+        SoapClient::parse_single_result(&body, "NetRevenueResult")
+    }
+
     /// Check if a specific reference is still outstanding in an administration.
     pub async fn check_outstanding_item_admin(
         &self,

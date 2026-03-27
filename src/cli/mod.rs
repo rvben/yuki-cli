@@ -5,6 +5,7 @@ pub mod contacts;
 pub mod documents;
 pub mod init;
 pub mod invoices;
+pub mod projects;
 pub mod upload;
 pub mod vat;
 
@@ -96,6 +97,12 @@ pub enum Commands {
     Vat {
         #[command(subcommand)]
         command: VatCommands,
+    },
+
+    /// Work with projects.
+    Projects {
+        #[command(subcommand)]
+        command: ProjectCommands,
     },
 
     /// Run compliance and period checks.
@@ -224,6 +231,40 @@ pub enum AccountCommands {
 
     /// Show the chart of accounts (GL account scheme).
     Scheme,
+
+    /// Show net revenue for a period.
+    Revenue {
+        /// Accounting period (e.g. 2025, 2025-Q1, 2025-01).
+        #[arg(long)]
+        period: Option<String>,
+    },
+
+    /// Show opening balances per GL account for a book year.
+    StartBalance {
+        /// Book year (e.g. 2025).
+        #[arg(long)]
+        year: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ProjectCommands {
+    /// List all projects.
+    List,
+
+    /// Show balance for a project.
+    Balance {
+        /// Project code.
+        project: String,
+
+        /// GL account code filter.
+        #[arg(long)]
+        account: Option<String>,
+
+        /// Accounting period (e.g. 2025, 2025-Q1).
+        #[arg(long)]
+        period: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

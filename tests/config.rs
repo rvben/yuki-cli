@@ -61,6 +61,7 @@ fn saves_config_roundtrip() {
             },
         )]
         .into(),
+        unmatched_ignore: Vec::new(),
     };
 
     config.save_to(&path).unwrap();
@@ -91,6 +92,7 @@ fn resolve_admin_returns_entry_for_known_name() {
             },
         )]
         .into(),
+        unmatched_ignore: Vec::new(),
     };
     let entry = config.resolve_admin(None).unwrap();
     assert_eq!(entry.domain_id, "uuid-a");
@@ -119,6 +121,7 @@ fn resolve_admin_override_takes_precedence() {
             ),
         ]
         .into(),
+        unmatched_ignore: Vec::new(),
     };
     let entry = config.resolve_admin(Some("co_b")).unwrap();
     assert_eq!(entry.domain_id, "uuid-b");
@@ -138,6 +141,52 @@ fn resolve_admin_errors_on_unknown_name() {
             },
         )]
         .into(),
+        unmatched_ignore: Vec::new(),
     };
     assert!(config.resolve_admin(Some("unknown")).is_err());
+}
+
+#[test]
+fn loads_config_with_unmatched_ignore() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(
+        &path,
+        r#"
+api_key = "test-key"
+default_admin = "co"
+unmatched_ignore = ["Belastingdienst", "ING bankkosten"]
+
+[administrations.co]
+domain_id = "uuid-1"
+admin_id = "admin-1"
+"#,
+    )
+    .unwrap();
+
+    let config = Config::load_from(&path).unwrap();
+    assert_eq!(config.unmatched_ignore.len(), 2);
+    assert_eq!(config.unmatched_ignore[0], "Belastingdienst");
+    assert_eq!(config.unmatched_ignore[1], "ING bankkosten");
+}
+
+#[test]
+fn loads_config_without_unmatched_ignore() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(
+        &path,
+        r#"
+api_key = "test-key"
+default_admin = "co"
+
+[administrations.co]
+domain_id = "uuid-1"
+admin_id = "admin-1"
+"#,
+    )
+    .unwrap();
+
+    let config = Config::load_from(&path).unwrap();
+    assert!(config.unmatched_ignore.is_empty());
 }

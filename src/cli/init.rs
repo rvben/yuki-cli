@@ -120,6 +120,7 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
         api_key,
         default_admin: default_name.clone(),
         administrations,
+        unmatched_ignore: Vec::new(),
     };
 
     let path = Config::default_path();

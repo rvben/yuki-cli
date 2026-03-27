@@ -16,6 +16,10 @@ pub struct Config {
     pub api_key: String,
     pub default_admin: String,
     pub administrations: BTreeMap<String, AdminEntry>,
+    /// Counterparty name patterns to ignore in `check unmatched`.
+    /// Matched case-insensitively as substrings against the counterparty name.
+    #[serde(default)]
+    pub unmatched_ignore: Vec<String>,
 }
 
 impl Config {

@@ -6,7 +6,7 @@ use yuki_cli::cli::Cli;
 use yuki_cli::cli::Commands;
 use yuki_cli::cli::{
     AccountCommands, AdminCommands, CheckCommands, ContactCommands, DocumentCommands,
-    InvoiceCommands, UploadCommands, VatCommands,
+    InvoiceCommands, ProjectCommands, UploadCommands, VatCommands,
 };
 use yuki_cli::config::Config;
 use yuki_cli::error::YukiError;
@@ -145,6 +145,39 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
                 AccountCommands::Scheme => {
                     yuki_cli::cli::accounts::scheme(&config, admin, format).await?;
+                }
+                AccountCommands::Revenue { period } => {
+                    yuki_cli::cli::accounts::revenue(&config, admin, period.as_deref(), format)
+                        .await?;
+                }
+                AccountCommands::StartBalance { year } => {
+                    yuki_cli::cli::accounts::start_balance(&config, admin, year.as_deref(), format)
+                        .await?;
+                }
+            }
+        }
+
+        Commands::Projects { command } => {
+            let config = Config::load()?;
+            let admin = cli.admin.as_deref();
+            match command {
+                ProjectCommands::List => {
+                    yuki_cli::cli::projects::list(&config, admin, format).await?;
+                }
+                ProjectCommands::Balance {
+                    project,
+                    account,
+                    period,
+                } => {
+                    yuki_cli::cli::projects::balance(
+                        &config,
+                        admin,
+                        &project,
+                        account.as_deref(),
+                        period.as_deref(),
+                        format,
+                    )
+                    .await?;
                 }
             }
         }

@@ -209,7 +209,7 @@ impl ArchiveClient {
     ///
     /// Each `<Document ID="uuid">` element carries child elements for each field.
     /// The document ID is an XML attribute; all other fields are child text nodes.
-    fn parse_archive_documents(xml: &str) -> Result<Vec<ArchiveDocument>, YukiError> {
+    pub fn parse_archive_documents(xml: &str) -> Result<Vec<ArchiveDocument>, YukiError> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 
@@ -308,7 +308,7 @@ impl ArchiveClient {
     ///
     /// Each `CostCategory` element carries an `ID` attribute and a `Description` child element:
     /// `<CostCategory ID="45100"><Description>...</Description></CostCategory>`
-    fn parse_cost_categories(xml: &str) -> Result<Vec<CostCategory>, YukiError> {
+    pub fn parse_cost_categories(xml: &str) -> Result<Vec<CostCategory>, YukiError> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 
@@ -378,7 +378,7 @@ impl ArchiveClient {
     ///
     /// Each `PaymentMethod` element carries an `ID` attribute and a `Description` child element:
     /// `<PaymentMethod ID="4"><Description>...</Description></PaymentMethod>`
-    fn parse_payment_methods(xml: &str) -> Result<Vec<PaymentMethod>, YukiError> {
+    pub fn parse_payment_methods(xml: &str) -> Result<Vec<PaymentMethod>, YukiError> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 

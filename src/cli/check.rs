@@ -249,6 +249,16 @@ pub async fn unmatched(
             tx.contact_name.clone()
         };
 
+        // Skip counterparties matching the configured ignore list.
+        let cp_lower = counterparty.to_lowercase();
+        if config
+            .unmatched_ignore
+            .iter()
+            .any(|pat| cp_lower.contains(&pat.to_lowercase()))
+        {
+            continue;
+        }
+
         // Fallback: check if the counterparty name is known in the archive.
         // Handles batched or split charges where the amount may differ.
         if archive_names.iter().any(|n| names_match(&counterparty, n)) {
@@ -359,4 +369,73 @@ fn current_year() -> u32 {
         .unwrap_or_default()
         .as_secs();
     1970 + (secs / 31_557_600) as u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_counterparty_extracts_cntp_name() {
+        let desc = "/TRTP/SEPA/CNTP/NL01ABNA0001234567/ABNANL2A/Vimexx B.V./REMI/Hosting";
+        assert_eq!(parse_counterparty(desc), "Vimexx B.V.");
+    }
+
+    #[test]
+    fn parse_counterparty_falls_back_to_description() {
+        assert_eq!(
+            parse_counterparty("ING bankkosten maart"),
+            "ING bankkosten maart"
+        );
+    }
+
+    #[test]
+    fn parse_counterparty_truncates_long() {
+        let desc = "A".repeat(100);
+        assert_eq!(parse_counterparty(&desc).len(), 50);
+    }
+
+    #[test]
+    fn normalize_name_strips_legal_suffixes() {
+        assert_eq!(normalize_name("Vimexx B.V."), "vimexx");
+        assert_eq!(normalize_name("Hetzner GmbH"), "hetzner");
+        assert_eq!(normalize_name("Amazon Inc"), "amazon");
+    }
+
+    #[test]
+    fn normalize_name_removes_via_suffix() {
+        assert_eq!(normalize_name("Vimexx via Mollie"), "vimexx");
+    }
+
+    #[test]
+    fn normalize_name_handles_empty() {
+        assert_eq!(normalize_name(""), "");
+    }
+
+    #[test]
+    fn names_match_bidirectional_substring() {
+        assert!(names_match("Hetzner Online GmbH", "Hetzner"));
+        assert!(names_match("Hetzner", "Hetzner Online GmbH"));
+    }
+
+    #[test]
+    fn names_match_case_insensitive() {
+        assert!(names_match("HETZNER", "hetzner online"));
+    }
+
+    #[test]
+    fn names_match_strips_legal_suffixes() {
+        assert!(names_match("Vimexx B.V.", "Vimexx via Mollie"));
+    }
+
+    #[test]
+    fn names_match_rejects_empty() {
+        assert!(!names_match("", "Hetzner"));
+        assert!(!names_match("Hetzner", ""));
+    }
+
+    #[test]
+    fn names_match_rejects_unrelated() {
+        assert!(!names_match("Hetzner", "Amazon"));
+    }
 }

@@ -16,6 +16,30 @@ pub struct GlAccount {
     pub account_type: String,
 }
 
+/// Opening balance for a GL account.
+#[derive(Debug, Clone)]
+pub struct AccountStartBalance {
+    pub gl_account_code: String,
+    pub description: String,
+    pub balance: String,
+}
+
+/// A project entry.
+#[derive(Debug, Clone)]
+pub struct Project {
+    pub id: String,
+    pub code: String,
+    pub description: String,
+}
+
+/// A project balance entry.
+#[derive(Debug, Clone)]
+pub struct ProjectBalance {
+    pub project_code: String,
+    pub gl_account_code: String,
+    pub amount: String,
+}
+
 /// Full details for a single transaction line.
 #[derive(Debug, Clone)]
 pub struct TransactionDetail {
@@ -208,6 +232,61 @@ impl AccountingInfoClient {
         self.soap.call("GetPeriodDateTable", envelope).await
     }
 
+    /// Retrieve opening balances per GL account for a book year.
+    pub async fn get_start_balance_by_gl_account(
+        &self,
+        administration_id: &str,
+        bookyear: &str,
+    ) -> Result<Vec<AccountStartBalance>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GetStartBalanceByGlAccount")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("bookyear", bookyear)
+            .param("financialMode", "0")
+            .build();
+        let body = self
+            .soap
+            .call("GetStartBalanceByGlAccount", envelope)
+            .await?;
+        Self::parse_start_balances(&body)
+    }
+
+    /// Retrieve all projects.
+    pub async fn get_projects(&self, administration_id: &str) -> Result<Vec<Project>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GetProjectsAndID")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("searchOption", "")
+            .param("searchValue", "")
+            .build();
+        let body = self.soap.call("GetProjectsAndID", envelope).await?;
+        Self::parse_projects(&body)
+    }
+
+    /// Retrieve project balance for a specific project and GL account over a date range.
+    pub async fn get_project_balance(
+        &self,
+        administration_id: &str,
+        project_code: &str,
+        gl_account_code: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<ProjectBalance>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GetProjectBalance")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("GLAccountCode", gl_account_code)
+            .param("projectCode", project_code)
+            .param("StartDate", start_date)
+            .param("EndDate", end_date)
+            .build();
+        let body = self.soap.call("GetProjectBalance", envelope).await?;
+        Self::parse_project_balances(&body)
+    }
+
     /// Parse a GetGLAccountScheme response into a list of `GlAccount` values.
     ///
     /// Each `GlAccount` element carries child elements for code, description, and type.
@@ -282,6 +361,233 @@ impl AccountingInfoClient {
         }
 
         Ok(accounts)
+    }
+
+    fn parse_start_balances(xml: &str) -> Result<Vec<AccountStartBalance>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut balances = Vec::new();
+        let mut in_item = false;
+        let mut field: Option<String> = None;
+        let mut current = AccountStartBalance {
+            gl_account_code: String::new(),
+            description: String::new(),
+            balance: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "AccountStartBalance" => {
+                            in_item = true;
+                            current = AccountStartBalance {
+                                gl_account_code: String::new(),
+                                description: String::new(),
+                                balance: String::new(),
+                            };
+                        }
+                        "GLAccountCode" | "glAccountCode" | "Description" | "description"
+                        | "Balance" | "balance" | "StartBalance" | "startBalance"
+                            if in_item =>
+                        {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "GLAccountCode" | "glAccountCode" => current.gl_account_code = text,
+                            "Description" | "description" => current.description = text,
+                            "Balance" | "balance" | "StartBalance" | "startBalance" => {
+                                current.balance = text;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "GLAccountCode" | "glAccountCode" | "Description" | "description"
+                        | "Balance" | "balance" | "StartBalance" | "startBalance" => {
+                            field = None;
+                        }
+                        "AccountStartBalance" if in_item => {
+                            balances.push(current.clone());
+                            in_item = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(balances)
+    }
+
+    fn parse_projects(xml: &str) -> Result<Vec<Project>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut projects = Vec::new();
+        let mut in_item = false;
+        let mut field: Option<String> = None;
+        let mut current = Project {
+            id: String::new(),
+            code: String::new(),
+            description: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Project" => {
+                            in_item = true;
+                            current = Project {
+                                id: String::new(),
+                                code: String::new(),
+                                description: String::new(),
+                            };
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"ID" {
+                                    current.id = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                            }
+                        }
+                        "Code" | "code" | "Description" | "description" if in_item => {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "Code" | "code" => current.code = text,
+                            "Description" | "description" => current.description = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Code" | "code" | "Description" | "description" => {
+                            field = None;
+                        }
+                        "Project" if in_item => {
+                            projects.push(current.clone());
+                            in_item = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(projects)
+    }
+
+    fn parse_project_balances(xml: &str) -> Result<Vec<ProjectBalance>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut balances = Vec::new();
+        let mut in_item = false;
+        let mut field: Option<String> = None;
+        let mut current = ProjectBalance {
+            project_code: String::new(),
+            gl_account_code: String::new(),
+            amount: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "ProjectBalance" => {
+                            in_item = true;
+                            current = ProjectBalance {
+                                project_code: String::new(),
+                                gl_account_code: String::new(),
+                                amount: String::new(),
+                            };
+                        }
+                        "ProjectCode" | "projectCode" | "GLAccountCode" | "glAccountCode"
+                        | "Amount" | "amount"
+                            if in_item =>
+                        {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "ProjectCode" | "projectCode" => current.project_code = text,
+                            "GLAccountCode" | "glAccountCode" => current.gl_account_code = text,
+                            "Amount" | "amount" => current.amount = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "ProjectCode" | "projectCode" | "GLAccountCode" | "glAccountCode"
+                        | "Amount" | "amount" => {
+                            field = None;
+                        }
+                        "ProjectBalance" if in_item => {
+                            balances.push(current.clone());
+                            in_item = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(balances)
     }
 }
 
