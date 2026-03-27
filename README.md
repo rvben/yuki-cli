@@ -55,7 +55,6 @@ yuki admin switch <name>                  # Change default administration
 
 ```sh
 yuki check btw 2025-Q4                    # VAT period check: outstanding items
-yuki check jaarwerk 2025                  # Annual accounts completeness check
 yuki check unmatched --period 2026-Q1     # Bank debits without matching invoices
 ```
 

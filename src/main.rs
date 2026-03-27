@@ -194,16 +194,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     yuki_cli::cli::check::btw(&config, admin, period.as_deref(), format, cli.quiet)
                         .await?;
                 }
-                CheckCommands::Jaarwerk { year } => {
-                    yuki_cli::cli::check::jaarwerk(
-                        &config,
-                        admin,
-                        year.as_deref(),
-                        format,
-                        cli.quiet,
-                    )
-                    .await?;
-                }
                 CheckCommands::Unmatched { period } => {
                     yuki_cli::cli::check::unmatched(
                         &config,

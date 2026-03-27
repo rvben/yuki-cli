@@ -1,6 +1,5 @@
 use crate::cli::setup_domain;
 use crate::client::accounting::AccountingClient;
-use crate::client::accounting_info::AccountingInfoClient;
 use crate::client::archive::ArchiveClient;
 use crate::client::vat::VatClient;
 use crate::config::Config;
@@ -81,103 +80,6 @@ pub async fn btw(
             ]);
         }
     }
-
-    for item in &debtors {
-        rows.push(vec![
-            "Debtor".into(),
-            item.contact_name.clone(),
-            item.description.clone(),
-            item.date.clone(),
-            item.amount.clone(),
-            item.open_amount.clone(),
-        ]);
-    }
-
-    for item in &creditors {
-        rows.push(vec![
-            "Creditor".into(),
-            item.contact_name.clone(),
-            item.description.clone(),
-            item.date.clone(),
-            item.amount.clone(),
-            item.open_amount.clone(),
-        ]);
-    }
-
-    let fmt = OutputFormat::from_flag(format, is_tty());
-    match fmt {
-        OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
-        OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
-    }
-    Ok(())
-}
-
-pub async fn jaarwerk(
-    config: &Config,
-    admin: Option<&str>,
-    year: Option<&str>,
-    format: Option<&str>,
-    quiet: bool,
-) -> Result<(), YukiError> {
-    let year_str = year.unwrap_or("2025");
-    let start = format!("{year_str}-01-01");
-    let end = format!("{year_str}-12-31");
-
-    if !quiet {
-        eprintln!("[1/4] Fetching period date table...");
-    }
-    let mut info_client = AccountingInfoClient::new();
-    info_client.authenticate(&config.api_key).await?;
-    let _period_table = info_client.get_period_date_table(year_str).await?;
-
-    if !quiet {
-        eprintln!("[2/4] Fetching GL account balances...");
-    }
-    let (accounting_client, entry) = setup_domain(config, admin).await?;
-    let balance = accounting_client
-        .gl_account_balance(&entry.admin_id, "", &end)
-        .await?;
-
-    if !quiet {
-        eprintln!("[3/4] Fetching outstanding items...");
-    }
-    let debtors = accounting_client
-        .outstanding_debtor_items_by_date(&entry.admin_id, &start, &end)
-        .await?;
-    let creditors = accounting_client
-        .outstanding_creditor_items_by_date(&entry.admin_id, &start, &end)
-        .await?;
-
-    if !quiet {
-        eprintln!("[4/4] Fetching modified documents...");
-    }
-    let mut archive_client = ArchiveClient::new();
-    archive_client.authenticate(&config.api_key).await?;
-    let _modified = archive_client.modified_documents_by_type(0, &start).await?;
-
-    if !quiet {
-        let api_calls = 5;
-        eprintln!("API calls made: {api_calls}");
-    }
-
-    let headers = vec![
-        "Type".into(),
-        "Contact".into(),
-        "Description".into(),
-        "Date".into(),
-        "Amount".into(),
-        "Open".into(),
-    ];
-    let mut rows: Vec<Vec<String>> = Vec::new();
-
-    rows.push(vec![
-        "GL Balance".into(),
-        String::new(),
-        format!("Year {year_str}"),
-        start,
-        balance,
-        String::new(),
-    ]);
 
     for item in &debtors {
         rows.push(vec![

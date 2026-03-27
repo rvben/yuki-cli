@@ -216,12 +216,6 @@ pub enum CheckCommands {
         period: Option<String>,
     },
 
-    /// Run year-end (jaarwerk) checks for a given year.
-    Jaarwerk {
-        /// Fiscal year (e.g. 2025).
-        year: Option<String>,
-    },
-
     /// Find bank transactions without matching booked invoices.
     Unmatched {
         /// Accounting period (e.g. 2025-Q1).
