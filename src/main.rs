@@ -6,7 +6,7 @@ use yuki_cli::cli::Cli;
 use yuki_cli::cli::Commands;
 use yuki_cli::cli::{
     AccountCommands, AdminCommands, CheckCommands, ContactCommands, DocumentCommands,
-    InvoiceCommands, VatCommands,
+    InvoiceCommands, UploadCommands, VatCommands,
 };
 use yuki_cli::config::Config;
 use yuki_cli::error::YukiError;
@@ -213,6 +213,41 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         cli.quiet,
                     )
                     .await?;
+                }
+            }
+        }
+
+        Commands::Upload { command } => {
+            let config = Config::load()?;
+            let admin = cli.admin.as_deref();
+            match command {
+                UploadCommands::File {
+                    file,
+                    folder,
+                    amount,
+                    category,
+                    payment_method,
+                    project,
+                    remarks,
+                    currency,
+                } => {
+                    let options = yuki_cli::cli::upload::UploadOptions {
+                        folder: &folder,
+                        amount,
+                        category: category.as_deref(),
+                        payment_method: payment_method.as_deref(),
+                        project: project.as_deref(),
+                        remarks: remarks.as_deref(),
+                        currency: &currency,
+                    };
+                    yuki_cli::cli::upload::run(&config, admin, &file, options, format, cli.quiet)
+                        .await?;
+                }
+                UploadCommands::Categories => {
+                    yuki_cli::cli::upload::categories(&config, format).await?;
+                }
+                UploadCommands::PaymentMethods => {
+                    yuki_cli::cli::upload::payment_methods(&config, format).await?;
                 }
             }
         }

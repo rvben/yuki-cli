@@ -5,6 +5,7 @@ pub mod contacts;
 pub mod documents;
 pub mod init;
 pub mod invoices;
+pub mod upload;
 pub mod vat;
 
 use clap::{Parser, Subcommand};
@@ -93,6 +94,12 @@ pub enum Commands {
     Check {
         #[command(subcommand)]
         command: CheckCommands,
+    },
+
+    /// Upload documents to the Yuki archive.
+    Upload {
+        #[command(subcommand)]
+        command: UploadCommands,
     },
 }
 
@@ -221,4 +228,47 @@ pub enum CheckCommands {
         #[arg(long)]
         period: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub enum UploadCommands {
+    /// Upload a document with optional invoice metadata.
+    File {
+        /// Path to the file to upload.
+        file: String,
+
+        /// Target folder (inkoop, verkoop, bank, personeel, belasting, uitzoeken, overig-financieel).
+        #[arg(long, default_value = "inkoop")]
+        folder: String,
+
+        /// Invoice amount (e.g. 114.27); enables richer metadata upload.
+        #[arg(long)]
+        amount: Option<f64>,
+
+        /// Cost category ID (e.g. 45100).
+        #[arg(long)]
+        category: Option<String>,
+
+        /// Payment method ID (e.g. 4 for pinpas).
+        #[arg(long = "payment-method")]
+        payment_method: Option<String>,
+
+        /// Project ID.
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Remarks or notes.
+        #[arg(long)]
+        remarks: Option<String>,
+
+        /// Currency code (default: EUR).
+        #[arg(long, default_value = "EUR")]
+        currency: String,
+    },
+
+    /// List available cost categories.
+    Categories,
+
+    /// List available payment methods.
+    PaymentMethods,
 }
