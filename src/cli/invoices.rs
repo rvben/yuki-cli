@@ -67,6 +67,34 @@ pub async fn list(
     Ok(())
 }
 
+pub async fn document(
+    config: &Config,
+    admin: Option<&str>,
+    id: &str,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let entry = config.resolve_admin(admin)?;
+    let mut client = AccountingInfoClient::new();
+    client.authenticate(&config.api_key).await?;
+    let xml = client.get_transaction_document(&entry.admin_id, id).await?;
+
+    let result = crate::client::soap_client::SoapClient::parse_single_result(
+        &xml,
+        "GetTransactionDocumentResult",
+    )
+    .unwrap_or(xml);
+
+    let headers = vec!["Transaction".into(), "Document".into()];
+    let rows = vec![vec![id.to_string(), result]];
+
+    let fmt = OutputFormat::from_flag(format, is_tty());
+    match fmt {
+        OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
+        OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
+    }
+    Ok(())
+}
+
 pub async fn show(
     config: &Config,
     _admin: Option<&str>,

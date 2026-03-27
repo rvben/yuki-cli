@@ -1,6 +1,7 @@
 use crate::cli::setup_domain;
 use crate::client::accounting::AccountingClient;
 use crate::client::archive::ArchiveClient;
+use crate::client::soap_client::SoapClient;
 use crate::client::vat::VatClient;
 use crate::config::Config;
 use crate::error::YukiError;
@@ -161,10 +162,9 @@ pub async fn unmatched(
         (accounting_client, entry)
     };
 
-    let raw = accounting_client
-        .gl_account_transactions(&entry.admin_id, bank_account, &start, &end)
+    let transactions = accounting_client
+        .gl_account_transactions_and_contact(&entry.admin_id, bank_account, &start, &end)
         .await?;
-    let transactions = AccountingClient::parse_gl_transactions(&raw)?;
 
     if !quiet {
         eprintln!("[2/3] Fetching outstanding creditor items...");
@@ -242,9 +242,15 @@ pub async fn unmatched(
             continue;
         }
 
+        // Use API-provided contact name when available, fall back to SEPA parsing.
+        let counterparty = if tx.contact_name.is_empty() {
+            parse_counterparty(&tx.description)
+        } else {
+            tx.contact_name.clone()
+        };
+
         // Fallback: check if the counterparty name is known in the archive.
         // Handles batched or split charges where the amount may differ.
-        let counterparty = parse_counterparty(&tx.description);
         if archive_names.iter().any(|n| names_match(&counterparty, n)) {
             continue;
         }
@@ -270,6 +276,31 @@ pub async fn unmatched(
     match fmt {
         OutputFormat::Table => println!("{}", format_table(&headers, &unmatched_rows)),
         OutputFormat::Json => println!("{}", format_json(&headers, &unmatched_rows)),
+    }
+    Ok(())
+}
+
+/// Check if a specific invoice reference is still outstanding.
+pub async fn outstanding(
+    config: &Config,
+    admin: Option<&str>,
+    reference: &str,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let (client, entry) = setup_domain(config, admin).await?;
+    let xml = client
+        .check_outstanding_item_admin(&entry.admin_id, reference)
+        .await?;
+    let result =
+        SoapClient::parse_single_result(&xml, "CheckOutstandingItemAdminResult").unwrap_or(xml);
+
+    let headers = vec!["Reference".into(), "Result".into()];
+    let rows = vec![vec![reference.to_string(), result]];
+
+    let fmt = OutputFormat::from_flag(format, is_tty());
+    match fmt {
+        OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
+        OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
 }

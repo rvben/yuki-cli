@@ -141,6 +141,12 @@ pub enum InvoiceCommands {
         /// Invoice ID.
         id: String,
     },
+
+    /// Show the document linked to a transaction.
+    Document {
+        /// Transaction ID.
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -215,6 +221,9 @@ pub enum AccountCommands {
         #[arg(long)]
         period: Option<String>,
     },
+
+    /// Show the chart of accounts (GL account scheme).
+    Scheme,
 }
 
 #[derive(Subcommand)]
@@ -245,6 +254,12 @@ pub enum CheckCommands {
         /// GL account code for the bank account (default: 11001).
         #[arg(long, default_value = "11001")]
         bank_account: String,
+    },
+
+    /// Check if a specific invoice reference is still outstanding.
+    Outstanding {
+        /// Invoice reference to check.
+        reference: String,
     },
 }
 

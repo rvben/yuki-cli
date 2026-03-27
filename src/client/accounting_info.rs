@@ -8,6 +8,14 @@ use super::soap_client::{SoapClient, SoapEnvelope};
 
 const BASE_URL: &str = "https://api.yukiworks.nl/ws/AccountingInfo.asmx";
 
+/// A general ledger account from the chart of accounts.
+#[derive(Debug, Clone)]
+pub struct GlAccount {
+    pub code: String,
+    pub description: String,
+    pub account_type: String,
+}
+
 /// Full details for a single transaction line.
 #[derive(Debug, Clone)]
 pub struct TransactionDetail {
@@ -161,13 +169,33 @@ impl AccountingInfoClient {
         self.soap.call("GetTransactions", envelope).await
     }
 
-    /// Retrieve the full GL account scheme.
-    pub async fn get_gl_account_scheme(&self) -> Result<String, YukiError> {
+    /// Retrieve the full GL account scheme (chart of accounts).
+    pub async fn get_gl_account_scheme(
+        &self,
+        administration_id: &str,
+    ) -> Result<Vec<GlAccount>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("GetGLAccountScheme")
             .session(session)
+            .param("administrationID", administration_id)
             .build();
-        self.soap.call("GetGLAccountScheme", envelope).await
+        let body = self.soap.call("GetGLAccountScheme", envelope).await?;
+        Self::parse_gl_accounts(&body)
+    }
+
+    /// Retrieve the document linked to a transaction.
+    pub async fn get_transaction_document(
+        &self,
+        administration_id: &str,
+        transaction_id: &str,
+    ) -> Result<String, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GetTransactionDocument")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("transactionID", transaction_id)
+            .build();
+        self.soap.call("GetTransactionDocument", envelope).await
     }
 
     /// Retrieve the period date table for a given fiscal year.
@@ -178,6 +206,82 @@ impl AccountingInfoClient {
             .param("year", year)
             .build();
         self.soap.call("GetPeriodDateTable", envelope).await
+    }
+
+    /// Parse a GetGLAccountScheme response into a list of `GlAccount` values.
+    ///
+    /// Each `GlAccount` element carries child elements for code, description, and type.
+    fn parse_gl_accounts(xml: &str) -> Result<Vec<GlAccount>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut accounts = Vec::new();
+        let mut in_account = false;
+        let mut field: Option<String> = None;
+        let mut current = GlAccount {
+            code: String::new(),
+            description: String::new(),
+            account_type: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "GlAccount" | "GLAccount" => {
+                            in_account = true;
+                            current = GlAccount {
+                                code: String::new(),
+                                description: String::new(),
+                                account_type: String::new(),
+                            };
+                        }
+                        "Code" | "code" | "Description" | "description" | "Type" | "type"
+                            if in_account =>
+                        {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "Code" | "code" => current.code = text,
+                            "Description" | "description" => current.description = text,
+                            "Type" | "type" => current.account_type = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Code" | "code" | "Description" | "description" | "Type" | "type" => {
+                            field = None;
+                        }
+                        "GlAccount" | "GLAccount" if in_account => {
+                            accounts.push(current.clone());
+                            in_account = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(accounts)
     }
 }
 

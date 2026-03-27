@@ -1,5 +1,6 @@
 use crate::cli::setup_domain;
 use crate::client::accounting::AccountingClient;
+use crate::client::accounting_info::AccountingInfoClient;
 use crate::client::soap_client::SoapClient;
 use crate::config::Config;
 use crate::error::YukiError;
@@ -63,6 +64,30 @@ pub async fn transactions(
                 t.description.clone(),
             ]
         })
+        .collect();
+
+    let fmt = OutputFormat::from_flag(format, is_tty());
+    match fmt {
+        OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
+        OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
+    }
+    Ok(())
+}
+
+pub async fn scheme(
+    config: &Config,
+    admin: Option<&str>,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let entry = config.resolve_admin(admin)?;
+    let mut client = AccountingInfoClient::new();
+    client.authenticate(&config.api_key).await?;
+    let accounts = client.get_gl_account_scheme(&entry.admin_id).await?;
+
+    let headers = vec!["Code".into(), "Description".into(), "Type".into()];
+    let rows: Vec<Vec<String>> = accounts
+        .into_iter()
+        .map(|a| vec![a.code, a.description, a.account_type])
         .collect();
 
     let fmt = OutputFormat::from_flag(format, is_tty());

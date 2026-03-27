@@ -143,6 +143,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 }
+                AccountCommands::Scheme => {
+                    yuki_cli::cli::accounts::scheme(&config, admin, format).await?;
+                }
             }
         }
 
@@ -165,6 +168,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
                 InvoiceCommands::Show { id } => {
                     yuki_cli::cli::invoices::show(&config, admin, &id, format).await?;
+                }
+                InvoiceCommands::Document { id } => {
+                    yuki_cli::cli::invoices::document(&config, admin, &id, format).await?;
                 }
             }
         }
@@ -225,6 +231,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         cli.quiet,
                     )
                     .await?;
+                }
+                CheckCommands::Outstanding { reference } => {
+                    yuki_cli::cli::check::outstanding(&config, admin, &reference, format).await?;
                 }
             }
         }

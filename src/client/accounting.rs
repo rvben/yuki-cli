@@ -36,6 +36,17 @@ pub struct GlTransaction {
     pub amount: String,
 }
 
+/// A general ledger transaction with contact information.
+#[derive(Debug, Clone)]
+pub struct GlTransactionWithContact {
+    pub id: String,
+    pub date: String,
+    pub description: String,
+    pub gl_account: String,
+    pub amount: String,
+    pub contact_name: String,
+}
+
 /// Client for the Yuki Accounting SOAP service.
 pub struct AccountingClient {
     soap: SoapClient,
@@ -186,6 +197,44 @@ impl AccountingClient {
         Self::parse_outstanding_items(&body, "OutstandingCreditorItemsByDateResult")
     }
 
+    /// Retrieve transactions for a GL account with contact info over a date range.
+    pub async fn gl_account_transactions_and_contact(
+        &self,
+        administration_id: &str,
+        gl_account_code: &str,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<GlTransactionWithContact>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("GLAccountTransactionsAndContact")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("GLAccountCode", gl_account_code)
+            .param("StartDate", start_date)
+            .param("EndDate", end_date)
+            .build();
+        let body = self
+            .soap
+            .call("GLAccountTransactionsAndContact", envelope)
+            .await?;
+        Self::parse_gl_transactions_with_contact(&body)
+    }
+
+    /// Check if a specific reference is still outstanding in an administration.
+    pub async fn check_outstanding_item_admin(
+        &self,
+        administration_id: &str,
+        reference: &str,
+    ) -> Result<String, YukiError> {
+        let session = self.require_session()?;
+        let envelope = SoapEnvelope::new("CheckOutstandingItemAdmin")
+            .session(session)
+            .param("administrationID", administration_id)
+            .param("Reference", reference)
+            .build();
+        self.soap.call("CheckOutstandingItemAdmin", envelope).await
+    }
+
     /// Parse a GLAccountTransactions SOAP response into a list of `GlTransaction` values.
     ///
     /// Each `GLAccountTransaction` element carries an `ID` attribute and child elements
@@ -252,6 +301,99 @@ impl AccountingClient {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
                         "Date" | "Description" | "Amount" | "GLAccountCode" => {
+                            field = None;
+                        }
+                        "GLAccountTransaction" if in_transaction => {
+                            transactions.push(current.clone());
+                            in_transaction = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(transactions)
+    }
+
+    /// Parse a GLAccountTransactionsAndContact SOAP response.
+    ///
+    /// Like `parse_gl_transactions` but also captures `Contact`/`ContactName`.
+    pub fn parse_gl_transactions_with_contact(
+        xml: &str,
+    ) -> Result<Vec<GlTransactionWithContact>, YukiError> {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut transactions = Vec::new();
+        let mut in_transaction = false;
+        let mut field: Option<String> = None;
+        let mut current = GlTransactionWithContact {
+            id: String::new(),
+            date: String::new(),
+            description: String::new(),
+            gl_account: String::new(),
+            amount: String::new(),
+            contact_name: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "GLAccountTransaction" => {
+                            in_transaction = true;
+                            current = GlTransactionWithContact {
+                                id: String::new(),
+                                date: String::new(),
+                                description: String::new(),
+                                gl_account: String::new(),
+                                amount: String::new(),
+                                contact_name: String::new(),
+                            };
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"ID" {
+                                    current.id = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                            }
+                        }
+                        "Date" | "Description" | "Amount" | "GLAccountCode" | "Contact"
+                        | "ContactName"
+                            if in_transaction =>
+                        {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "Date" => current.date = text,
+                            "Description" => current.description = text,
+                            "Amount" => current.amount = text,
+                            "GLAccountCode" => current.gl_account = text,
+                            "Contact" | "ContactName" => current.contact_name = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Date" | "Description" | "Amount" | "GLAccountCode" | "Contact"
+                        | "ContactName" => {
                             field = None;
                         }
                         "GLAccountTransaction" if in_transaction => {
