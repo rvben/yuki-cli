@@ -6,17 +6,21 @@ Query invoices, VAT returns, GL accounts, contacts, and projects. Find missing i
 
 ## Install
 
+```sh
+cargo install yuki-cli
 ```
+
+Or via pip:
+
+```sh
+pip install yuki-cli
+```
+
+From source:
+
+```sh
 make install
 ```
-
-Or directly:
-
-```
-cargo install --path .
-```
-
-This installs the `yuki` binary to `~/.cargo/bin/`.
 
 ## Setup
 
