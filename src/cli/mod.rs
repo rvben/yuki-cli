@@ -52,7 +52,15 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize yuki configuration for this machine.
-    Init,
+    Init {
+        /// API key (skips interactive prompt if provided).
+        #[arg(long)]
+        api_key: Option<String>,
+
+        /// Default administration name (auto-selects if only one available).
+        #[arg(long)]
+        default_admin: Option<String>,
+    },
 
     /// Manage Yuki administrations.
     Admin {

@@ -20,19 +20,23 @@ fn safe_name(name: &str) -> String {
         .collect()
 }
 
-pub async fn run() -> Result<(), YukiError> {
+pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(), YukiError> {
     let stdin = io::stdin();
 
-    eprint!("Yuki API key: ");
-    io::stderr().flush().ok();
-
-    let api_key = stdin
-        .lock()
-        .lines()
-        .next()
-        .and_then(|l| l.ok())
-        .map(|l| l.trim().to_string())
-        .unwrap_or_default();
+    let api_key = match api_key {
+        Some(k) => k.trim().to_string(),
+        None => {
+            eprint!("Yuki API key: ");
+            io::stderr().flush().ok();
+            stdin
+                .lock()
+                .lines()
+                .next()
+                .and_then(|l| l.ok())
+                .map(|l| l.trim().to_string())
+                .unwrap_or_default()
+        }
+    };
 
     if api_key.is_empty() {
         return Err(YukiError::Config("API key cannot be empty".to_string()));
@@ -56,7 +60,17 @@ pub async fn run() -> Result<(), YukiError> {
         eprintln!("  [{}] {}", i + 1, a.name);
     }
 
-    let default_name = if admins.len() == 1 {
+    let default_name = if let Some(name) = default_admin {
+        // Use the provided name directly — verify it exists.
+        let key = safe_name(name);
+        if !admins.iter().any(|a| safe_name(&a.name) == key) {
+            return Err(YukiError::Config(format!(
+                "administration not found: {name}"
+            )));
+        }
+        eprintln!("Using \"{name}\" as the default administration.");
+        key
+    } else if admins.len() == 1 {
         eprintln!(
             "Using \"{}\" as the default administration.",
             admins[0].name

@@ -72,8 +72,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let format = cli.format.as_deref();
 
     match cli.command {
-        Commands::Init => {
-            yuki_cli::cli::init::run().await?;
+        Commands::Init {
+            api_key,
+            default_admin,
+        } => {
+            yuki_cli::cli::init::run(api_key.as_deref(), default_admin.as_deref()).await?;
         }
 
         Commands::Admin { command } => {
