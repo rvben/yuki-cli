@@ -206,6 +206,15 @@ pub async fn unmatched(
         }
     }
 
+    // Build a set of normalized contact names from the archive for fallback name matching.
+    // This catches batched or split charges where the amount differs but the supplier is known.
+    let archive_names: std::collections::HashSet<String> = archive_docs
+        .iter()
+        .filter(|d| !d.contact_name.is_empty())
+        .map(|d| normalize_name(&d.contact_name))
+        .filter(|n| !n.is_empty())
+        .collect();
+
     let mut unmatched_rows: Vec<Vec<String>> = Vec::new();
 
     for tx in &transactions {
@@ -225,7 +234,7 @@ pub async fn unmatched(
             continue;
         }
 
-        // Check booked invoices in the archive.
+        // Check booked invoices in the archive by amount.
         if let Some(count) = archive_pool.get_mut(&abs_amount)
             && *count > 0
         {
@@ -233,7 +242,13 @@ pub async fn unmatched(
             continue;
         }
 
+        // Fallback: check if the counterparty name is known in the archive.
+        // Handles batched or split charges where the amount may differ.
         let counterparty = parse_counterparty(&tx.description);
+        if archive_names.iter().any(|n| names_match(&counterparty, n)) {
+            continue;
+        }
+
         unmatched_rows.push(vec![
             tx.id.clone(),
             tx.date.clone(),
@@ -257,6 +272,41 @@ pub async fn unmatched(
         OutputFormat::Json => println!("{}", format_json(&headers, &unmatched_rows)),
     }
     Ok(())
+}
+
+/// Normalize a company name for fuzzy matching.
+///
+/// Lowercases the name, removes "via ..." suffixes, strips common legal suffixes
+/// and punctuation, and trims whitespace. This allows loose matching between bank
+/// counterparty names and Yuki contact names despite formatting differences.
+fn normalize_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    // Remove "via ..." suffix (e.g. "Vimexx via Mollie" -> "vimexx")
+    let base = lower.split(" via ").next().unwrap_or(&lower);
+    base.replace("b.v.", "")
+        .replace("bv", "")
+        .replace("gmbh", "")
+        .replace("inc", "")
+        .replace("ltd", "")
+        .replace("s.a.", "")
+        .replace('.', "")
+        .replace(',', "")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Check whether two company names refer to the same entity.
+///
+/// Returns true if one normalized name contains the other, allowing for
+/// abbreviations or partial matches.
+fn names_match(bank_name: &str, archive_name: &str) -> bool {
+    let a = normalize_name(bank_name);
+    let b = normalize_name(archive_name);
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    a.contains(b.as_str()) || b.contains(a.as_str())
 }
 
 /// Resolve an optional period string to (start_date, end_date).
