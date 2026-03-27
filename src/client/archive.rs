@@ -181,7 +181,7 @@ impl ArchiveClient {
             .param("currency", currency)
             .param("amount", &amount_str)
             .param("costCategory", cost_category.unwrap_or(""))
-            .param("paymentMethod", payment_method.unwrap_or(""))
+            .param("paymentMethod", payment_method.unwrap_or("0"))
             .param("project", project.unwrap_or(""))
             .param("remarks", remarks.unwrap_or(""))
             .build();
