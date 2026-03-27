@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "CLI client for the Yuki bookkeeping SOAP API"
 
+[lib]
+name = "yuki_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "yuki"
 path = "src/main.rs"
