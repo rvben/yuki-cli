@@ -69,20 +69,21 @@ fn soap_action_header_format() {
 
 #[test]
 fn parses_administrations_response() {
+    // Real Yuki API format: ID is an attribute on Administration, not a child element
     let xml = r#"<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <soap:Body>
     <AdministrationsResponse xmlns="http://www.theyukicompany.com/">
       <AdministrationsResult>
-        <Administration>
-          <ID>admin-001</ID>
-          <Name>Acme BV</Name>
-        </Administration>
-        <Administration>
-          <ID>admin-002</ID>
-          <Name>Widget Corp</Name>
-        </Administration>
+        <Administrations xmlns="">
+          <Administration ID="admin-001">
+            <Name>Acme BV</Name>
+          </Administration>
+          <Administration ID="admin-002">
+            <Name>Widget Corp</Name>
+          </Administration>
+        </Administrations>
       </AdministrationsResult>
     </AdministrationsResponse>
   </soap:Body>

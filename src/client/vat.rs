@@ -47,19 +47,31 @@ impl VatClient {
         self.soap.authenticate(api_key).await
     }
 
-    /// Retrieve the list of VAT returns.
-    pub async fn vat_return_list(&self) -> Result<Vec<VatReturn>, YukiError> {
+    /// Retrieve the list of VAT returns for an administration.
+    pub async fn vat_return_list(
+        &self,
+        administration_id: &str,
+    ) -> Result<Vec<VatReturn>, YukiError> {
         let session = self.require_session()?;
-        let envelope = SoapEnvelope::new("VatReturnList").session(session).build();
-        let body = self.soap.call("VatReturnList", envelope).await?;
+        let envelope = SoapEnvelope::new("VATReturnList")
+            .session(session)
+            .param("administrationID", administration_id)
+            .build();
+        let body = self.soap.call("VATReturnList", envelope).await?;
         Self::parse_vat_returns(&body)
     }
 
-    /// Retrieve all active VAT codes.
-    pub async fn active_vat_codes(&self) -> Result<Vec<VatCode>, YukiError> {
+    /// Retrieve all active VAT codes for an administration.
+    pub async fn active_vat_codes(
+        &self,
+        administration_id: &str,
+    ) -> Result<Vec<VatCode>, YukiError> {
         let session = self.require_session()?;
-        let envelope = SoapEnvelope::new("ActiveVatCodes").session(session).build();
-        let body = self.soap.call("ActiveVatCodes", envelope).await?;
+        let envelope = SoapEnvelope::new("ActiveVATCodesList")
+            .session(session)
+            .param("administrationID", administration_id)
+            .build();
+        let body = self.soap.call("ActiveVATCodesList", envelope).await?;
         Self::parse_vat_codes(&body)
     }
 
@@ -84,7 +96,7 @@ impl VatClient {
                 Ok(Event::Start(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "VatReturn" => {
+                        "VATReturnInfo" => {
                             in_item = true;
                             current = VatReturn {
                                 period: String::new(),
@@ -93,7 +105,7 @@ impl VatClient {
                                 end_date: String::new(),
                             };
                         }
-                        "Period" | "Status" | "StartDate" | "EndDate" if in_item => {
+                        "startDate" | "endDate" | "status" if in_item => {
                             field = Some(local);
                         }
                         _ => {}
@@ -107,10 +119,9 @@ impl VatClient {
                             .trim()
                             .to_string();
                         match f.as_str() {
-                            "Period" => current.period = text,
-                            "Status" => current.status = text,
-                            "StartDate" => current.start_date = text,
-                            "EndDate" => current.end_date = text,
+                            "startDate" => current.start_date = text,
+                            "endDate" => current.end_date = text,
+                            "status" => current.status = text,
                             _ => {}
                         }
                     }
@@ -118,8 +129,22 @@ impl VatClient {
                 Ok(Event::End(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "Period" | "Status" | "StartDate" | "EndDate" => field = None,
-                        "VatReturn" if in_item => {
+                        "startDate" | "endDate" | "status" => field = None,
+                        "VATReturnInfo" if in_item => {
+                            // Derive period from start/end dates
+                            current.period = format!(
+                                "{} - {}",
+                                current
+                                    .start_date
+                                    .split('T')
+                                    .next()
+                                    .unwrap_or(&current.start_date),
+                                current
+                                    .end_date
+                                    .split('T')
+                                    .next()
+                                    .unwrap_or(&current.end_date),
+                            );
                             returns.push(current.clone());
                             in_item = false;
                         }
@@ -155,14 +180,14 @@ impl VatClient {
                 Ok(Event::Start(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "VatCode" => {
+                        "VATCode" => {
                             in_item = true;
                             current = VatCode {
                                 code: String::new(),
                                 description: String::new(),
                             };
                         }
-                        "Code" | "Description" if in_item => {
+                        "type" | "description" if in_item => {
                             field = Some(local);
                         }
                         _ => {}
@@ -176,8 +201,8 @@ impl VatClient {
                             .trim()
                             .to_string();
                         match f.as_str() {
-                            "Code" => current.code = text,
-                            "Description" => current.description = text,
+                            "type" => current.code = text,
+                            "description" => current.description = text,
                             _ => {}
                         }
                     }
@@ -185,8 +210,8 @@ impl VatClient {
                 Ok(Event::End(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "Code" | "Description" => field = None,
-                        "VatCode" if in_item => {
+                        "type" | "description" => field = None,
+                        "VATCode" if in_item => {
                             codes.push(current.clone());
                             in_item = false;
                         }

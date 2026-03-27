@@ -168,6 +168,10 @@ impl AccountingClient {
     }
 
     /// Parse an Administrations SOAP response into a list of `Administration` values.
+    ///
+    /// The Yuki API returns Administration elements with the ID as an XML attribute
+    /// and Name as a child element:
+    /// `<Administration ID="uuid"><Name>Company</Name>...</Administration>`
     pub fn parse_administrations(xml: &str) -> Result<Vec<Administration>, YukiError> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
@@ -176,7 +180,6 @@ impl AccountingClient {
         let mut current_id = String::new();
         let mut current_name = String::new();
         let mut in_administration = false;
-        let mut in_id = false;
         let mut in_name = false;
         let mut buf = Vec::new();
 
@@ -189,8 +192,13 @@ impl AccountingClient {
                             in_administration = true;
                             current_id.clear();
                             current_name.clear();
+                            // ID is an attribute on the Administration element
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"ID" {
+                                    current_id = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                            }
                         }
-                        "ID" if in_administration => in_id = true,
                         "Name" if in_administration => in_name = true,
                         _ => {}
                     }
@@ -201,16 +209,13 @@ impl AccountingClient {
                         .map_err(|e| YukiError::Xml(e.to_string()))?
                         .trim()
                         .to_string();
-                    if in_id {
-                        current_id = text;
-                    } else if in_name {
+                    if in_name {
                         current_name = text;
                     }
                 }
                 Ok(Event::End(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "ID" => in_id = false,
                         "Name" => in_name = false,
                         "Administration" => {
                             if !current_id.is_empty() {

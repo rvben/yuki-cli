@@ -21,7 +21,8 @@ pub async fn btw(
     }
     let mut vat_client = VatClient::new();
     vat_client.authenticate(&config.api_key).await?;
-    let vat_returns = vat_client.vat_return_list().await?;
+    let admin_id = config.resolve_admin(admin)?;
+    let vat_returns = vat_client.vat_return_list(&admin_id).await?;
 
     if !quiet {
         eprintln!("[2/5] Fetching GL account transactions...");

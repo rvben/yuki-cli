@@ -5,13 +5,14 @@ use crate::output::{OutputFormat, format_json, format_table, is_tty};
 
 pub async fn returns(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     year: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
+    let admin_id = config.resolve_admin(admin)?;
     let mut client = VatClient::new();
     client.authenticate(&config.api_key).await?;
-    let all_returns = client.vat_return_list().await?;
+    let all_returns = client.vat_return_list(&admin_id).await?;
 
     let filtered: Vec<_> = match year {
         Some(y) => all_returns
@@ -49,12 +50,13 @@ pub async fn returns(
 
 pub async fn codes(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
+    let admin_id = config.resolve_admin(admin)?;
     let mut client = VatClient::new();
     client.authenticate(&config.api_key).await?;
-    let vat_codes = client.active_vat_codes().await?;
+    let vat_codes = client.active_vat_codes(&admin_id).await?;
 
     let headers = vec!["Code".into(), "Description".into()];
     let rows: Vec<Vec<String>> = vat_codes
