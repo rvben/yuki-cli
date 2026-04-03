@@ -1,9 +1,44 @@
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 
+use owo_colors::OwoColorize;
+
 use crate::client::accounting::AccountingClient;
 use crate::config::{AdminEntry, Config};
 use crate::error::YukiError;
+use crate::output::is_tty;
+
+fn sym_ok() -> String {
+    if is_tty() {
+        "✔".green().to_string()
+    } else {
+        "✔".to_owned()
+    }
+}
+
+fn sym_fail() -> String {
+    if is_tty() {
+        "✖".red().to_string()
+    } else {
+        "✖".to_owned()
+    }
+}
+
+fn bold(s: &str) -> String {
+    if is_tty() {
+        s.bold().to_string()
+    } else {
+        s.to_owned()
+    }
+}
+
+fn dim(s: &str) -> String {
+    if is_tty() {
+        s.dimmed().to_string()
+    } else {
+        s.to_owned()
+    }
+}
 
 /// Convert an administration name to a safe config key.
 ///
@@ -39,13 +74,14 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
 
         config.api_key = key;
         config.save_to(&path)?;
-        eprintln!("API key updated in {}", path.display());
+        eprintln!("{} API key updated in {}", sym_ok(), path.display());
         return Ok(());
     }
 
     let api_key = match api_key {
         Some(k) => k.trim().to_string(),
         None => {
+            eprintln!("  {} Yuki Portal → Settings → API keys", dim("→"));
             eprint!("Yuki API key: ");
             io::stderr().flush().ok();
             stdin
@@ -62,12 +98,29 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
         return Err(YukiError::Config("API key cannot be empty".to_string()));
     }
 
-    eprintln!("Authenticating...");
+    eprint!("Authenticating...");
+    io::stderr().flush().ok();
     let mut client = AccountingClient::new();
-    client.authenticate(&api_key).await?;
+    match client.authenticate(&api_key).await {
+        Ok(_) => eprintln!(" {}", sym_ok()),
+        Err(e) => {
+            eprintln!(" {}", sym_fail());
+            return Err(e);
+        }
+    }
 
-    eprintln!("Fetching administrations...");
-    let admins = client.administrations().await?;
+    eprint!("Fetching administrations...");
+    io::stderr().flush().ok();
+    let admins = match client.administrations().await {
+        Ok(admins) => {
+            eprintln!(" {}", sym_ok());
+            admins
+        }
+        Err(e) => {
+            eprintln!(" {}", sym_fail());
+            return Err(e);
+        }
+    };
 
     if admins.is_empty() {
         return Err(YukiError::NotFound(
@@ -150,8 +203,18 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
 
     config.save_to(&path)?;
 
-    eprintln!("Configuration saved to {}", path.display());
-    eprintln!("Default administration: {default_name}");
+    eprintln!();
+    eprintln!("{} Configuration saved to {}", sym_ok(), path.display());
+    eprintln!();
+    eprintln!("{}:", bold("Next steps"));
+    eprintln!(
+        "  yuki documents list  {}",
+        dim("# list archived documents")
+    );
+    eprintln!("  yuki contacts list   {}", dim("# list contacts"));
+    eprintln!("  yuki invoices list   {}", dim("# list invoices"));
+    eprintln!("  yuki completions zsh {}", dim("# shell completions"));
+    eprintln!();
 
     Ok(())
 }
