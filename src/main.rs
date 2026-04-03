@@ -1,7 +1,8 @@
 use std::fmt;
 use std::process;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use owo_colors::OwoColorize;
 use yuki_cli::cli::Cli;
 use yuki_cli::cli::Commands;
 use yuki_cli::cli::{
@@ -54,7 +55,7 @@ async fn main() {
     if let Err(err) = run(cli).await {
         let code = err.exit_code();
         if is_tty() {
-            eprintln!("error: {err}");
+            eprintln!("{} {err}", "error:".red().bold());
         } else {
             let label = match code {
                 2 => "auth_failed",
@@ -269,6 +270,19 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     yuki_cli::cli::check::outstanding(&config, admin, &reference, format).await?;
                 }
             }
+        }
+
+        Commands::Completions { shell } => {
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                env!("CARGO_PKG_NAME"),
+                &mut std::io::stdout(),
+            );
+        }
+
+        Commands::Schema => {
+            yuki_cli::schema::print_schema();
         }
 
         Commands::Upload { command } => {

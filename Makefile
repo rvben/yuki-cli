@@ -13,8 +13,8 @@ test:
 	cargo test
 
 lint:
-	cargo clippy -- -D warnings
 	cargo fmt -- --check
+	cargo clippy -- -D warnings
 
 fmt:
 	cargo fmt

@@ -25,22 +25,22 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
     let path = Config::default_path();
 
     // If config exists and only --api-key is provided, update the key in place.
-    if let (Some(key), None) = (api_key, default_admin) {
-        if let Ok(mut config) = Config::load_from(&path) {
-            let key = key.trim().to_string();
-            if key.is_empty() {
-                return Err(YukiError::Config("API key cannot be empty".to_string()));
-            }
-
-            eprintln!("Verifying new API key...");
-            let mut client = AccountingClient::new();
-            client.authenticate(&key).await?;
-
-            config.api_key = key;
-            config.save_to(&path)?;
-            eprintln!("API key updated in {}", path.display());
-            return Ok(());
+    if let (Some(key), None) = (api_key, default_admin)
+        && let Ok(mut config) = Config::load_from(&path)
+    {
+        let key = key.trim().to_string();
+        if key.is_empty() {
+            return Err(YukiError::Config("API key cannot be empty".to_string()));
         }
+
+        eprintln!("Verifying new API key...");
+        let mut client = AccountingClient::new();
+        client.authenticate(&key).await?;
+
+        config.api_key = key;
+        config.save_to(&path)?;
+        eprintln!("API key updated in {}", path.display());
+        return Ok(());
     }
 
     let api_key = match api_key {

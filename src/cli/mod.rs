@@ -120,6 +120,15 @@ pub enum Commands {
         #[command(subcommand)]
         command: UploadCommands,
     },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        shell: clap_complete::Shell,
+    },
+
+    /// Output JSON schema for agent integration
+    Schema,
 }
 
 #[derive(Subcommand)]

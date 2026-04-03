@@ -1,4 +1,4 @@
-use comfy_table::{Table, presets::UTF8_FULL_CONDENSED};
+use comfy_table::{Cell, Color, Table, presets::UTF8_FULL_CONDENSED};
 use serde_json::{Map, Value, json};
 
 pub enum OutputFormat {
@@ -36,7 +36,15 @@ pub fn format_json(headers: &[String], rows: &[Vec<String>]) -> String {
 pub fn format_table(headers: &[String], rows: &[Vec<String>]) -> String {
     let mut table = Table::new();
     table.load_preset(UTF8_FULL_CONDENSED);
-    table.set_header(headers);
+    let header_cells: Vec<Cell> = headers
+        .iter()
+        .map(|h| {
+            Cell::new(h)
+                .fg(Color::White)
+                .add_attribute(comfy_table::Attribute::Bold)
+        })
+        .collect();
+    table.set_header(header_cells);
     for row in rows {
         table.add_row(row);
     }
