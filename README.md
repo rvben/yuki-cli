@@ -1,5 +1,7 @@
 # yuki
 
+[![codecov](https://codecov.io/gh/rvben/yuki-cli/graph/badge.svg)](https://codecov.io/gh/rvben/yuki-cli)
+
 CLI client for the [Yuki](https://www.yukiworks.nl) bookkeeping SOAP API.
 
 [Yuki](https://www.yukiworks.nl) is a Dutch bookkeeping SaaS used for accounting, VAT returns, and document archiving. This CLI lets you query your administration, find missing invoices, and upload documents — from the terminal or as part of automated workflows.
