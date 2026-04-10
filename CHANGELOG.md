@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+## [0.1.5](https://github.com/rvben/yuki-cli/compare/v0.1.4...v0.1.5) - 2026-04-10
+
 ## [0.1.4](https://github.com/rvben/yuki-cli/compare/v0.1.3...v0.1.4) - 2026-04-03
 
 ### Added
