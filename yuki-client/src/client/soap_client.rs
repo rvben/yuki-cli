@@ -114,6 +114,14 @@ impl SoapClient {
         let status = response.status();
         let body = response.text().await?;
 
+        // Set YUKI_DEBUG_XML to dump raw SOAP responses to stderr for diagnosis.
+        if std::env::var_os("YUKI_DEBUG_XML").is_some() {
+            eprintln!(
+                "=== YUKI_DEBUG_XML {operation} HTTP {} ===\n{body}\n=== end {operation} ===",
+                status.as_u16()
+            );
+        }
+
         if status == 401 || status == 403 {
             return Err(YukiError::AuthFailed(format!("HTTP {status}")));
         }

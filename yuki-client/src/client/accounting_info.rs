@@ -281,7 +281,7 @@ impl AccountingInfoClient {
     /// Parse a GetGLAccountScheme response into a list of `GlAccount` values.
     ///
     /// Each `GlAccount` element carries child elements for code, description, and type.
-    fn parse_gl_accounts(xml: &str) -> Result<Vec<GlAccount>, YukiError> {
+    pub fn parse_gl_accounts(xml: &str) -> Result<Vec<GlAccount>, YukiError> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 
@@ -308,7 +308,8 @@ impl AccountingInfoClient {
                                 account_type: String::new(),
                             };
                         }
-                        "Code" | "code" | "Description" | "description" | "Type" | "type"
+                        "Code" | "code" | "Description" | "description" | "descripton" | "Type"
+                        | "type"
                             if in_account =>
                         {
                             field = Some(local);
@@ -325,7 +326,9 @@ impl AccountingInfoClient {
                             .to_string();
                         match f.as_str() {
                             "Code" | "code" => current.code = text,
-                            "Description" | "description" => current.description = text,
+                            "Description" | "description" | "descripton" => {
+                                current.description = text;
+                            }
                             "Type" | "type" => current.account_type = text,
                             _ => {}
                         }
@@ -334,7 +337,8 @@ impl AccountingInfoClient {
                 Ok(Event::End(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "Code" | "code" | "Description" | "description" | "Type" | "type" => {
+                        "Code" | "code" | "Description" | "description" | "descripton" | "Type"
+                        | "type" => {
                             field = None;
                         }
                         "GlAccount" | "GLAccount" if in_account => {
@@ -354,7 +358,7 @@ impl AccountingInfoClient {
         Ok(accounts)
     }
 
-    fn parse_start_balances(xml: &str) -> Result<Vec<AccountStartBalance>, YukiError> {
+    pub fn parse_start_balances(xml: &str) -> Result<Vec<AccountStartBalance>, YukiError> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 
@@ -381,8 +385,9 @@ impl AccountingInfoClient {
                                 balance: String::new(),
                             };
                         }
-                        "GLAccountCode" | "glAccountCode" | "Description" | "description"
-                        | "Balance" | "balance" | "StartBalance" | "startBalance"
+                        "GLAccountCode" | "glAccountCode" | "accountID" | "Description"
+                        | "description" | "accountDescription" | "Balance" | "balance"
+                        | "StartBalance" | "startBalance"
                             if in_item =>
                         {
                             field = Some(local);
@@ -398,8 +403,12 @@ impl AccountingInfoClient {
                             .trim()
                             .to_string();
                         match f.as_str() {
-                            "GLAccountCode" | "glAccountCode" => current.gl_account_code = text,
-                            "Description" | "description" => current.description = text,
+                            "GLAccountCode" | "glAccountCode" | "accountID" => {
+                                current.gl_account_code = text;
+                            }
+                            "Description" | "description" | "accountDescription" => {
+                                current.description = text;
+                            }
                             "Balance" | "balance" | "StartBalance" | "startBalance" => {
                                 current.balance = text;
                             }
@@ -410,8 +419,9 @@ impl AccountingInfoClient {
                 Ok(Event::End(ref e)) => {
                     let local = local_name(e.name().as_ref()).to_string();
                     match local.as_str() {
-                        "GLAccountCode" | "glAccountCode" | "Description" | "description"
-                        | "Balance" | "balance" | "StartBalance" | "startBalance" => {
+                        "GLAccountCode" | "glAccountCode" | "accountID" | "Description"
+                        | "description" | "accountDescription" | "Balance" | "balance"
+                        | "StartBalance" | "startBalance" => {
                             field = None;
                         }
                         "AccountStartBalance" if in_item => {

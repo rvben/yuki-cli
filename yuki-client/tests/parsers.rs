@@ -375,3 +375,82 @@ fn parses_outstanding_creditor_items() {
     assert_eq!(items[0].amount, "250.00");
     assert_eq!(items[0].open_amount, "250.00");
 }
+
+#[test]
+fn parses_gl_account_balances() {
+    // Real GLAccountBalance shape: the operation returns every account, each a
+    // <GLAccount> with Code/BalanceType attributes and Description/Amount children.
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GLAccountBalanceResponse xmlns="http://www.theyukicompany.com/">
+      <GLAccountBalanceResult>
+        <GLAccountBalance xmlns="">
+          <GLAccount Code="20200" BalanceType="B"><Description>RC Ruben Jongejan</Description><Amount>3472.31</Amount></GLAccount>
+          <GLAccount Code="80000" BalanceType="W"><Description>Omzet</Description><Amount>-155843.75</Amount></GLAccount>
+        </GLAccountBalance>
+      </GLAccountBalanceResult>
+    </GLAccountBalanceResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let balances = AccountingClient::parse_gl_account_balances(xml).unwrap();
+    assert_eq!(balances.len(), 2);
+    assert_eq!(balances[0].code, "20200");
+    assert_eq!(balances[0].description, "RC Ruben Jongejan");
+    assert_eq!(balances[0].balance_type, "B");
+    assert_eq!(balances[0].amount, "3472.31");
+    assert_eq!(balances[1].code, "80000");
+    assert_eq!(balances[1].balance_type, "W");
+    assert_eq!(balances[1].amount, "-155843.75");
+}
+
+#[test]
+fn parses_gl_account_scheme_with_misspelled_description() {
+    // Yuki's GetGLAccountScheme uses lowercase children and misspells the
+    // description element as <descripton>; the parser must read it regardless.
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetGLAccountSchemeResponse xmlns="http://www.theyukicompany.com/">
+      <GetGLAccountSchemeResult>
+        <GlAccount><code>01000</code><type>1</type><subtype>90</subtype><isEnabled>true</isEnabled><descripton>Oprichtingskosten</descripton></GlAccount>
+        <GlAccount><code>20200</code><type>2</type><descripton>RC Ruben Jongejan</descripton></GlAccount>
+      </GetGLAccountSchemeResult>
+    </GetGLAccountSchemeResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let accounts = AccountingInfoClient::parse_gl_accounts(xml).unwrap();
+    assert_eq!(accounts.len(), 2);
+    assert_eq!(accounts[0].code, "01000");
+    assert_eq!(accounts[0].account_type, "1");
+    assert_eq!(accounts[0].description, "Oprichtingskosten");
+    assert_eq!(accounts[1].code, "20200");
+    assert_eq!(accounts[1].description, "RC Ruben Jongejan");
+}
+
+#[test]
+fn parses_start_balances_with_account_id_fields() {
+    // Real GetStartBalanceByGlAccount shape: <accountID>, <startBalance>,
+    // <accountDescription>.
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetStartBalanceByGlAccountResponse xmlns="http://www.theyukicompany.com/">
+      <GetStartBalanceByGlAccountResult>
+        <AccountStartBalance><accountID>02300</accountID><startBalance>1216.53</startBalance><accountDescription>Inventaris en inrichting</accountDescription></AccountStartBalance>
+        <AccountStartBalance><accountID>20200</accountID><startBalance>-89018.96</startBalance><accountDescription>RC Ruben Jongejan</accountDescription></AccountStartBalance>
+      </GetStartBalanceByGlAccountResult>
+    </GetStartBalanceByGlAccountResponse>
+  </soap:Body>
+</soap:Envelope>"#;
+
+    let balances = AccountingInfoClient::parse_start_balances(xml).unwrap();
+    assert_eq!(balances.len(), 2);
+    assert_eq!(balances[0].gl_account_code, "02300");
+    assert_eq!(balances[0].balance, "1216.53");
+    assert_eq!(balances[0].description, "Inventaris en inrichting");
+    assert_eq!(balances[1].gl_account_code, "20200");
+    assert_eq!(balances[1].description, "RC Ruben Jongejan");
+}

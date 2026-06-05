@@ -47,6 +47,19 @@ pub struct GlTransactionWithContact {
     pub contact_name: String,
 }
 
+/// A general ledger account balance as of a date, from `GLAccountBalance`.
+///
+/// The operation returns every account in one response, so callers filter by
+/// `code`. `balance_type` is Yuki's `B` (balance sheet) / `W` (profit & loss)
+/// marker.
+#[derive(Debug, Clone)]
+pub struct GlAccountBalance {
+    pub code: String,
+    pub description: String,
+    pub balance_type: String,
+    pub amount: String,
+}
+
 /// Client for the Yuki Accounting SOAP service.
 pub struct AccountingClient {
     soap: SoapClient,
@@ -99,21 +112,25 @@ impl AccountingClient {
         Ok(())
     }
 
-    /// Retrieve the balance of a GL account as of a given date.
-    pub async fn gl_account_balance(
+    /// Retrieve balances for all GL accounts as of a given date.
+    ///
+    /// Yuki's `GLAccountBalance` operation returns the full chart of accounts
+    /// (balance sheet and profit & loss) in one response and ignores any
+    /// account-code filter, so this returns every account; callers select the
+    /// ones they need by [`GlAccountBalance::code`].
+    pub async fn gl_account_balances(
         &self,
         administration_id: &str,
-        gl_account_code: &str,
         transaction_date: &str,
-    ) -> Result<String, YukiError> {
+    ) -> Result<Vec<GlAccountBalance>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("GLAccountBalance")
             .session(session)
             .param("administrationID", administration_id)
-            .param("GLAccountCode", gl_account_code)
             .param("transactionDate", transaction_date)
             .build();
-        self.soap.call("GLAccountBalance", envelope).await
+        let body = self.soap.call("GLAccountBalance", envelope).await?;
+        Self::parse_gl_account_balances(&body)
     }
 
     /// Retrieve transactions for a GL account over a date range.
@@ -259,6 +276,97 @@ impl AccountingClient {
             .param("Reference", reference)
             .build();
         self.soap.call("CheckOutstandingItemAdmin", envelope).await
+    }
+
+    /// Parse a GLAccountBalance SOAP response into per-account balances.
+    ///
+    /// Each repeating `GLAccount` element carries `Code` and `BalanceType`
+    /// attributes and child elements `Description` and `Amount`:
+    /// `<GLAccount Code="20200" BalanceType="B"><Description>RC Ruben Jongejan</Description><Amount>3472.31</Amount></GLAccount>`
+    pub fn parse_gl_account_balances(xml: &str) -> Result<Vec<GlAccountBalance>, YukiError> {
+        if let Some(err) = SoapClient::parse_soap_fault(xml) {
+            return Err(err);
+        }
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+
+        let mut balances = Vec::new();
+        let mut in_account = false;
+        let mut field: Option<String> = None;
+        let mut current = GlAccountBalance {
+            code: String::new(),
+            description: String::new(),
+            balance_type: String::new(),
+            amount: String::new(),
+        };
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "GLAccount" => {
+                            in_account = true;
+                            current = GlAccountBalance {
+                                code: String::new(),
+                                description: String::new(),
+                                balance_type: String::new(),
+                                amount: String::new(),
+                            };
+                            for attr in e.attributes().flatten() {
+                                match attr.key.as_ref() {
+                                    b"Code" => {
+                                        current.code =
+                                            String::from_utf8_lossy(&attr.value).to_string();
+                                    }
+                                    b"BalanceType" => {
+                                        current.balance_type =
+                                            String::from_utf8_lossy(&attr.value).to_string();
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        "Description" | "Amount" if in_account => {
+                            field = Some(local);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Text(ref e)) => {
+                    if let Some(ref f) = field {
+                        let text = e
+                            .unescape()
+                            .map_err(|e| YukiError::Xml(e.to_string()))?
+                            .trim()
+                            .to_string();
+                        match f.as_str() {
+                            "Description" => current.description = text,
+                            "Amount" => current.amount = text,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    let local = local_name(e.name().as_ref()).to_string();
+                    match local.as_str() {
+                        "Description" | "Amount" => field = None,
+                        "GLAccount" if in_account => {
+                            balances.push(current.clone());
+                            in_account = false;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(YukiError::Xml(e.to_string())),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(balances)
     }
 
     /// Parse a GLAccountTransactions SOAP response into a list of `GlTransaction` values.
