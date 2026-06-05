@@ -68,9 +68,18 @@ pub struct SoapClient {
 }
 
 impl SoapClient {
+    /// Create a transport with its own default HTTP client. Convenient for
+    /// short-lived consumers such as the CLI, where each invocation is fresh.
     pub fn new(base_url: &str) -> Self {
+        Self::with_client(base_url, Client::new())
+    }
+
+    /// Create a transport over a caller-provided HTTP client. Long-running
+    /// consumers (e.g. a server) should pass a single shared, pooled client
+    /// rather than constructing one per request.
+    pub fn with_client(base_url: &str, http: Client) -> Self {
         Self {
-            http: Client::new(),
+            http,
             base_url: base_url.to_string(),
             session_id: None,
         }

@@ -36,6 +36,14 @@ impl VatClient {
         }
     }
 
+    /// Build over a caller-provided HTTP client, so a long-running consumer can
+    /// share a single pooled client across all service clients.
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self {
+            soap: SoapClient::with_client(BASE_URL, http),
+        }
+    }
+
     fn require_session(&self) -> Result<&str, YukiError> {
         self.soap.session_id().ok_or_else(|| {
             YukiError::AuthFailed("not authenticated — call authenticate() first".to_string())

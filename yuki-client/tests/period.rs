@@ -1,4 +1,4 @@
-use yuki_cli::period::parse_period;
+use yuki_client::period::parse_period;
 
 #[test]
 fn parses_quarter_q1() {

@@ -1,9 +1,9 @@
-use yuki_cli::client::accounting::AccountingClient;
-use yuki_cli::client::accounting_info::AccountingInfoClient;
-use yuki_cli::client::archive::ArchiveClient;
-use yuki_cli::client::contact::parse_contacts;
-use yuki_cli::client::sales::SalesClient;
-use yuki_cli::client::vat::VatClient;
+use yuki_client::client::accounting::AccountingClient;
+use yuki_client::client::accounting_info::AccountingInfoClient;
+use yuki_client::client::archive::ArchiveClient;
+use yuki_client::client::contact::parse_contacts;
+use yuki_client::client::sales::SalesClient;
+use yuki_client::client::vat::VatClient;
 
 #[test]
 fn parses_gl_transactions() {

@@ -1,0 +1,20 @@
+[package]
+name = "yuki-client"
+version = "0.1.5"
+edition = "2024"
+rust-version = "1.90"
+description = "Typed async client for the Yuki bookkeeping SOAP API"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/rvben/yuki-cli"
+keywords = ["yuki", "bookkeeping", "soap", "accounting"]
+categories = ["api-bindings"]
+
+[lib]
+name = "yuki_client"
+path = "src/lib.rs"
+
+[dependencies]
+quick-xml = "0.37"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+thiserror = "2"

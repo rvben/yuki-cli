@@ -1,5 +1,5 @@
-use yuki_cli::client::accounting::AccountingClient;
-use yuki_cli::client::{SoapClient, SoapEnvelope};
+use yuki_client::client::accounting::AccountingClient;
+use yuki_client::client::{SoapClient, SoapEnvelope};
 
 #[test]
 fn builds_soap_envelope_with_session() {
