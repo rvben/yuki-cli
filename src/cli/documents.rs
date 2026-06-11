@@ -1,18 +1,17 @@
 use crate::client::archive::ArchiveClient;
 use crate::config::Config;
 use crate::error::YukiError;
-use crate::output::{OutputFormat, format_json, format_table, is_tty};
+use crate::output::{
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+};
 
-#[allow(clippy::too_many_arguments)]
 pub async fn list(
     config: &Config,
     _admin: Option<&str>,
     folder: Option<&str>,
     doc_type: Option<&str>,
     format: Option<&str>,
-    limit: Option<usize>,
-    offset: Option<usize>,
-    _fields: Option<&str>,
+    opts: ListOptions<'_>,
 ) -> Result<(), YukiError> {
     let mut client = ArchiveClient::new();
     client.authenticate(&config.api_key).await?;
@@ -65,7 +64,7 @@ pub async fn list(
             ]
         })
         .collect();
-    apply_pagination(&mut rows, offset, limit);
+    apply_pagination(&mut rows, &opts);
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
@@ -73,19 +72,6 @@ pub async fn list(
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
-}
-
-fn apply_pagination(rows: &mut Vec<Vec<String>>, offset: Option<usize>, limit: Option<usize>) {
-    if let Some(off) = offset {
-        if off >= rows.len() {
-            rows.clear();
-            return;
-        }
-        rows.drain(..off);
-    }
-    if let Some(lim) = limit {
-        rows.truncate(lim);
-    }
 }
 
 pub async fn search(

@@ -1,7 +1,9 @@
 use crate::client::contact::{Contact, ContactClient};
 use crate::config::Config;
 use crate::error::YukiError;
-use crate::output::{OutputFormat, format_json, format_table, is_tty};
+use crate::output::{
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+};
 
 fn contacts_to_rows(contacts: &[Contact]) -> Vec<Vec<String>> {
     contacts
@@ -52,9 +54,7 @@ pub async fn list(
     _admin: Option<&str>,
     contact_type: Option<&str>,
     format: Option<&str>,
-    limit: Option<usize>,
-    offset: Option<usize>,
-    _fields: Option<&str>,
+    opts: ListOptions<'_>,
 ) -> Result<(), YukiError> {
     let mut client = ContactClient::new();
     client.authenticate(&config.api_key).await?;
@@ -71,7 +71,7 @@ pub async fn list(
         "Customer".into(),
     ];
     let mut rows = contacts_to_rows(&contacts);
-    apply_pagination(&mut rows, offset, limit);
+    apply_pagination(&mut rows, &opts);
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
@@ -79,17 +79,4 @@ pub async fn list(
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
-}
-
-fn apply_pagination(rows: &mut Vec<Vec<String>>, offset: Option<usize>, limit: Option<usize>) {
-    if let Some(off) = offset {
-        if off >= rows.len() {
-            rows.clear();
-            return;
-        }
-        rows.drain(..off);
-    }
-    if let Some(lim) = limit {
-        rows.truncate(lim);
-    }
 }

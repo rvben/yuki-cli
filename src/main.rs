@@ -11,7 +11,7 @@ use yuki_cli::cli::{
 };
 use yuki_cli::config::Config;
 use yuki_cli::error::YukiError;
-use yuki_cli::output::{format_error_json, is_tty};
+use yuki_cli::output::{ListOptions, format_error_json, is_tty};
 
 enum AppError {
     Yuki(YukiError),
@@ -112,8 +112,16 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     offset,
                     fields,
                 } => {
-                    yuki_cli::cli::admin::list(&config, format, limit, offset, fields.as_deref())
-                        .await?;
+                    yuki_cli::cli::admin::list(
+                        &config,
+                        format,
+                        ListOptions {
+                            limit,
+                            offset,
+                            fields: fields.as_deref(),
+                        },
+                    )
+                    .await?;
                 }
                 AdminCommands::Switch { name } => {
                     let mut config = config;
@@ -153,9 +161,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         admin,
                         contact_type.as_deref(),
                         format,
-                        limit,
-                        offset,
-                        fields.as_deref(),
+                        ListOptions {
+                            limit,
+                            offset,
+                            fields: fields.as_deref(),
+                        },
                     )
                     .await?;
                 }
@@ -189,9 +199,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         account.as_deref(),
                         period.as_deref(),
                         format,
-                        limit,
-                        offset,
-                        fields.as_deref(),
+                        ListOptions {
+                            limit,
+                            offset,
+                            fields: fields.as_deref(),
+                        },
                     )
                     .await?;
                 }
@@ -251,9 +263,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         period.as_deref(),
                         invoice_type.as_deref(),
                         format,
-                        limit,
-                        offset,
-                        fields.as_deref(),
+                        ListOptions {
+                            limit,
+                            offset,
+                            fields: fields.as_deref(),
+                        },
                     )
                     .await?;
                 }
@@ -283,9 +297,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         folder.as_deref(),
                         doc_type.as_deref(),
                         format,
-                        limit,
-                        offset,
-                        fields.as_deref(),
+                        ListOptions {
+                            limit,
+                            offset,
+                            fields: fields.as_deref(),
+                        },
                     )
                     .await?;
                 }

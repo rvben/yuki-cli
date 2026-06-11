@@ -1,6 +1,28 @@
 use comfy_table::{Cell, Color, Table, presets::UTF8_FULL_CONDENSED};
 use serde_json::{Map, Value, json};
 
+/// Pagination and field-selection options shared by all list commands.
+#[derive(Default)]
+pub struct ListOptions<'a> {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub fields: Option<&'a str>,
+}
+
+/// Apply offset then limit to a row slice in place.
+pub fn apply_pagination(rows: &mut Vec<Vec<String>>, opts: &ListOptions<'_>) {
+    if let Some(off) = opts.offset {
+        if off >= rows.len() {
+            rows.clear();
+            return;
+        }
+        rows.drain(..off);
+    }
+    if let Some(lim) = opts.limit {
+        rows.truncate(lim);
+    }
+}
+
 pub enum OutputFormat {
     Table,
     Json,

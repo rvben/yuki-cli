@@ -3,31 +3,17 @@ use crate::client::accounting_info::AccountingInfoClient;
 use crate::client::sales::SalesClient;
 use crate::config::Config;
 use crate::error::YukiError;
-use crate::output::{OutputFormat, format_json, format_table, is_tty};
+use crate::output::{
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+};
 
-fn apply_pagination(rows: &mut Vec<Vec<String>>, offset: Option<usize>, limit: Option<usize>) {
-    if let Some(off) = offset {
-        if off >= rows.len() {
-            rows.clear();
-            return;
-        }
-        rows.drain(..off);
-    }
-    if let Some(lim) = limit {
-        rows.truncate(lim);
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
 pub async fn list(
     config: &Config,
     admin: Option<&str>,
     _period: Option<&str>,
     invoice_type: Option<&str>,
     format: Option<&str>,
-    limit: Option<usize>,
-    offset: Option<usize>,
-    _fields: Option<&str>,
+    opts: ListOptions<'_>,
 ) -> Result<(), YukiError> {
     let fmt = OutputFormat::from_flag(format, is_tty());
 
@@ -55,7 +41,7 @@ pub async fn list(
                     ]
                 })
                 .collect();
-            apply_pagination(&mut rows, offset, limit);
+            apply_pagination(&mut rows, &opts);
 
             match fmt {
                 OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
@@ -74,7 +60,7 @@ pub async fn list(
                 .iter()
                 .map(|i| vec![i.id.clone(), i.description.clone()])
                 .collect();
-            apply_pagination(&mut rows, offset, limit);
+            apply_pagination(&mut rows, &opts);
 
             match fmt {
                 OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
