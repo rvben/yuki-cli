@@ -46,31 +46,55 @@ impl AppError {
             Self::Other(_) => 1,
         }
     }
+
+    fn kind(&self) -> &str {
+        match self {
+            Self::Yuki(e) => match e {
+                YukiError::AuthFailed(_) => "auth_failed",
+                YukiError::NotFound(_) => "not_found",
+                YukiError::RateLimited => "rate_limited",
+                YukiError::Config(_) => "config_error",
+                _ => "error",
+            },
+            Self::Other(_) => "error",
+        }
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            use clap::error::ErrorKind;
+            // Help and version are informational exits, not errors.
+            // Print them normally and exit without an error envelope.
+            if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
+                let _ = e.print();
+                process::exit(0);
+            }
+            // Print clap's formatted error message to stderr, then the structured envelope.
+            eprintln!("{e}");
+            eprintln!("{}", format_error_json(&e.to_string(), "error"));
+            process::exit(e.exit_code());
+        }
+    };
 
     if let Err(err) = run(cli).await {
         let code = err.exit_code();
+        let kind = err.kind();
+        // On TTY: print a human-friendly prefix first, then the structured error.
         if is_tty() {
             eprintln!("{} {err}", "error:".red().bold());
-        } else {
-            let label = match code {
-                2 => "auth_failed",
-                3 => "not_found",
-                4 => "rate_limited",
-                _ => "error",
-            };
-            eprintln!("{}", format_error_json(&err.to_string(), label));
         }
+        // Always emit the structured error envelope as the last line of stderr.
+        eprintln!("{}", format_error_json(&err.to_string(), kind));
         process::exit(code.into());
     }
 }
 
 async fn run(cli: Cli) -> Result<(), AppError> {
-    let format = cli.format.as_deref();
+    let format = cli.output.as_deref();
 
     match cli.command {
         Commands::Init {
@@ -83,8 +107,13 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Commands::Admin { command } => {
             let config = Config::load()?;
             match command {
-                AdminCommands::List => {
-                    yuki_cli::cli::admin::list(&config, format).await?;
+                AdminCommands::List {
+                    limit,
+                    offset,
+                    fields,
+                } => {
+                    yuki_cli::cli::admin::list(&config, format, limit, offset, fields.as_deref())
+                        .await?;
                 }
                 AdminCommands::Switch { name } => {
                     let mut config = config;
@@ -113,9 +142,22 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 ContactCommands::Search { query } => {
                     yuki_cli::cli::contacts::search(&config, admin, &query, format).await?;
                 }
-                ContactCommands::List { contact_type } => {
-                    yuki_cli::cli::contacts::list(&config, admin, contact_type.as_deref(), format)
-                        .await?;
+                ContactCommands::List {
+                    contact_type,
+                    limit,
+                    offset,
+                    fields,
+                } => {
+                    yuki_cli::cli::contacts::list(
+                        &config,
+                        admin,
+                        contact_type.as_deref(),
+                        format,
+                        limit,
+                        offset,
+                        fields.as_deref(),
+                    )
+                    .await?;
                 }
             }
         }
@@ -134,13 +176,22 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 }
-                AccountCommands::Transactions { account, period } => {
+                AccountCommands::Transactions {
+                    account,
+                    period,
+                    limit,
+                    offset,
+                    fields,
+                } => {
                     yuki_cli::cli::accounts::transactions(
                         &config,
                         admin,
                         account.as_deref(),
                         period.as_deref(),
                         format,
+                        limit,
+                        offset,
+                        fields.as_deref(),
                     )
                     .await?;
                 }
@@ -190,6 +241,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 InvoiceCommands::List {
                     period,
                     invoice_type,
+                    limit,
+                    offset,
+                    fields,
                 } => {
                     yuki_cli::cli::invoices::list(
                         &config,
@@ -197,6 +251,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         period.as_deref(),
                         invoice_type.as_deref(),
                         format,
+                        limit,
+                        offset,
+                        fields.as_deref(),
                     )
                     .await?;
                 }
@@ -213,13 +270,22 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let config = Config::load()?;
             let admin = cli.admin.as_deref();
             match command {
-                DocumentCommands::List { folder, doc_type } => {
+                DocumentCommands::List {
+                    folder,
+                    doc_type,
+                    limit,
+                    offset,
+                    fields,
+                } => {
                     yuki_cli::cli::documents::list(
                         &config,
                         admin,
                         folder.as_deref(),
                         doc_type.as_deref(),
                         format,
+                        limit,
+                        offset,
+                        fields.as_deref(),
                     )
                     .await?;
                 }
@@ -299,6 +365,12 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     remarks,
                     currency,
                 } => {
+                    // Require explicit confirmation for non-interactive uploads.
+                    if !is_tty() && !cli.yes {
+                        return Err(AppError::Yuki(YukiError::Config(
+                            "upload file is a mutating operation; pass --yes to confirm in non-interactive mode".into(),
+                        )));
+                    }
                     let options = yuki_cli::cli::upload::UploadOptions {
                         folder: &folder,
                         amount,

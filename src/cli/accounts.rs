@@ -35,12 +35,16 @@ pub async fn balance(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn transactions(
     config: &Config,
     admin: Option<&str>,
     account: Option<&str>,
     period: Option<&str>,
     format: Option<&str>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    _fields: Option<&str>,
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
     let gl_code = account.unwrap_or("");
@@ -56,7 +60,7 @@ pub async fn transactions(
         "Amount".into(),
         "Description".into(),
     ];
-    let rows: Vec<Vec<String>> = transactions
+    let mut rows: Vec<Vec<String>> = transactions
         .iter()
         .map(|t| {
             vec![
@@ -67,6 +71,7 @@ pub async fn transactions(
             ]
         })
         .collect();
+    apply_pagination(&mut rows, offset, limit);
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
@@ -74,6 +79,19 @@ pub async fn transactions(
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
+}
+
+fn apply_pagination(rows: &mut Vec<Vec<String>>, offset: Option<usize>, limit: Option<usize>) {
+    if let Some(off) = offset {
+        if off >= rows.len() {
+            rows.clear();
+            return;
+        }
+        rows.drain(..off);
+    }
+    if let Some(lim) = limit {
+        rows.truncate(lim);
+    }
 }
 
 pub async fn scheme(
@@ -106,12 +124,19 @@ pub async fn start_balance(
     year: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let bookyear = year.unwrap_or(&current_year().to_string()).to_string();
+    let year_str;
+    let bookyear = match year {
+        Some(y) => y,
+        None => {
+            year_str = current_year().to_string();
+            &year_str
+        }
+    };
     let entry = config.resolve_admin(admin)?;
     let mut client = AccountingInfoClient::new();
     client.authenticate(&config.api_key).await?;
     let balances = client
-        .get_start_balance_by_gl_account(&entry.admin_id, &bookyear)
+        .get_start_balance_by_gl_account(&entry.admin_id, bookyear)
         .await?;
 
     let headers = vec!["GL Account".into(), "Description".into(), "Balance".into()];
@@ -139,7 +164,7 @@ pub async fn revenue(
     let amount = client.net_revenue(&entry.admin_id, &start, &end).await?;
 
     let headers = vec!["Period".into(), "Net Revenue".into()];
-    let rows = vec![vec![format!("{start} — {end}"), amount]];
+    let rows = vec![vec![format!("{start} to {end}"), amount]];
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {

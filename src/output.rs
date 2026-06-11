@@ -10,14 +10,29 @@ impl OutputFormat {
     pub fn from_flag(flag: Option<&str>, is_tty: bool) -> Self {
         match flag {
             Some("json") => Self::Json,
-            Some("table") => Self::Table,
-            Some(_) => Self::Table,
-            None if is_tty => Self::Table,
-            None => Self::Json,
+            // "text" and "table" both map to table output
+            Some("text") | Some("table") => Self::Table,
+            // Explicit "auto" or no flag: defer to TTY detection
+            Some("auto") | None => {
+                if is_tty {
+                    Self::Table
+                } else {
+                    Self::Json
+                }
+            }
+            // Any other unrecognized value: treat as auto
+            Some(_) => {
+                if is_tty {
+                    Self::Table
+                } else {
+                    Self::Json
+                }
+            }
         }
     }
 }
 
+/// Format rows as a clispec v0.2 items envelope: `{"items": [...], "total": N}`.
 pub fn format_json(headers: &[String], rows: &[Vec<String>]) -> String {
     let items: Vec<Value> = rows
         .iter()
@@ -30,7 +45,12 @@ pub fn format_json(headers: &[String], rows: &[Vec<String>]) -> String {
             Value::Object(map)
         })
         .collect();
-    serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".into())
+    let total = items.len();
+    serde_json::to_string_pretty(&json!({
+        "items": items,
+        "total": total
+    }))
+    .unwrap_or_else(|_| r#"{"items":[],"total":0}"#.into())
 }
 
 pub fn format_table(headers: &[String], rows: &[Vec<String>]) -> String {
@@ -51,12 +71,18 @@ pub fn format_table(headers: &[String], rows: &[Vec<String>]) -> String {
     table.to_string()
 }
 
-pub fn format_error_json(message: &str, code: &str) -> String {
-    serde_json::to_string_pretty(&json!({
-        "error": message,
-        "code": code,
+/// Format a structured error as the clispec v0.2 envelope.
+///
+/// The spec requires the last line of stderr to be:
+/// `{"error": {"kind": "<kind>", "message": "<message>"}}`
+pub fn format_error_json(message: &str, kind: &str) -> String {
+    serde_json::to_string(&json!({
+        "error": {
+            "kind": kind,
+            "message": message
+        }
     }))
-    .unwrap_or_else(|_| format!(r#"{{"error":"{message}","code":"{code}"}}"#))
+    .unwrap_or_else(|_| format!(r#"{{"error":{{"kind":"{kind}","message":"{message}"}}}}"#))
 }
 
 pub fn is_tty() -> bool {

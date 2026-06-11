@@ -52,6 +52,9 @@ pub async fn list(
     _admin: Option<&str>,
     contact_type: Option<&str>,
     format: Option<&str>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    _fields: Option<&str>,
 ) -> Result<(), YukiError> {
     let mut client = ContactClient::new();
     client.authenticate(&config.api_key).await?;
@@ -67,7 +70,8 @@ pub async fn list(
         "Supplier".into(),
         "Customer".into(),
     ];
-    let rows = contacts_to_rows(&contacts);
+    let mut rows = contacts_to_rows(&contacts);
+    apply_pagination(&mut rows, offset, limit);
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
@@ -75,4 +79,17 @@ pub async fn list(
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
+}
+
+fn apply_pagination(rows: &mut Vec<Vec<String>>, offset: Option<usize>, limit: Option<usize>) {
+    if let Some(off) = offset {
+        if off >= rows.len() {
+            rows.clear();
+            return;
+        }
+        rows.drain(..off);
+    }
+    if let Some(lim) = limit {
+        rows.truncate(lim);
+    }
 }

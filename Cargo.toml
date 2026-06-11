@@ -36,3 +36,4 @@ toml = "0.8"
 
 [dev-dependencies]
 tempfile = "3"
+jsonschema = "0.30"

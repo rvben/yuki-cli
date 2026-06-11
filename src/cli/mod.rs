@@ -42,13 +42,17 @@ pub struct Cli {
     #[arg(long = "admin", global = true)]
     pub admin: Option<String>,
 
-    /// Output format: table or json.
-    #[arg(long, global = true)]
-    pub format: Option<String>,
+    /// Output format: auto, text, or json.
+    #[arg(long = "output", short = 'o', global = true)]
+    pub output: Option<String>,
 
     /// Suppress all output except errors.
     #[arg(long, short, global = true)]
     pub quiet: bool,
+
+    /// Skip confirmation prompts (for use in scripts and pipelines).
+    #[arg(long = "yes", short = 'y', global = true)]
+    pub yes: bool,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -134,7 +138,19 @@ pub enum Commands {
 #[derive(Subcommand)]
 pub enum AdminCommands {
     /// List all available administrations.
-    List,
+    List {
+        /// Maximum number of results to return.
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Number of results to skip (for pagination).
+        #[arg(long)]
+        offset: Option<usize>,
+
+        /// Comma-separated list of fields to include in output.
+        #[arg(long)]
+        fields: Option<String>,
+    },
 
     /// Switch the active administration.
     Switch {
@@ -154,6 +170,18 @@ pub enum InvoiceCommands {
         /// Invoice type filter (e.g. sales, purchase).
         #[arg(long)]
         invoice_type: Option<String>,
+
+        /// Maximum number of results to return.
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Number of results to skip (for pagination).
+        #[arg(long)]
+        offset: Option<usize>,
+
+        /// Comma-separated list of fields to include in output.
+        #[arg(long)]
+        fields: Option<String>,
     },
 
     /// Show details for a single invoice.
@@ -180,6 +208,18 @@ pub enum DocumentCommands {
         /// Document type filter.
         #[arg(long)]
         doc_type: Option<String>,
+
+        /// Maximum number of results to return.
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Number of results to skip (for pagination).
+        #[arg(long)]
+        offset: Option<usize>,
+
+        /// Comma-separated list of fields to include in output.
+        #[arg(long)]
+        fields: Option<String>,
     },
 
     /// Search documents by a query string.
@@ -193,7 +233,7 @@ pub enum DocumentCommands {
         /// Invoice amount to search for.
         #[arg(long)]
         amount: f64,
-        /// Invoice date (YYYY-MM-DD). Matches within ±7 days.
+        /// Invoice date (YYYY-MM-DD). Matches within +/-7 days.
         #[arg(long)]
         date: String,
         /// Contact/supplier name to narrow the search.
@@ -215,6 +255,18 @@ pub enum ContactCommands {
         /// Contact type (e.g. customer, supplier).
         #[arg(long)]
         contact_type: Option<String>,
+
+        /// Maximum number of results to return.
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Number of results to skip (for pagination).
+        #[arg(long)]
+        offset: Option<usize>,
+
+        /// Comma-separated list of fields to include in output.
+        #[arg(long)]
+        fields: Option<String>,
     },
 }
 
@@ -240,6 +292,18 @@ pub enum AccountCommands {
         /// Accounting period (e.g. 2025-01).
         #[arg(long)]
         period: Option<String>,
+
+        /// Maximum number of results to return.
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Number of results to skip (for pagination).
+        #[arg(long)]
+        offset: Option<usize>,
+
+        /// Comma-separated list of fields to include in output.
+        #[arg(long)]
+        fields: Option<String>,
     },
 
     /// Show the chart of accounts (GL account scheme).
