@@ -22,7 +22,7 @@ name = "yuki"
 path = "src/main.rs"
 
 [dependencies]
-yuki-client = { path = "yuki-client" }
+yuki-client = { path = "yuki-client", version = "0.2.0" }
 anyhow = "1"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
