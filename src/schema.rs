@@ -441,14 +441,8 @@ pub fn generate() -> Value {
                 "description": "Configuration error: missing or invalid config file."
             },
             {
-                "kind": "conflict",
-                "exit_code": 5,
-                "retryable": false,
-                "description": "The operation conflicts with existing data (e.g. duplicate document)."
-            },
-            {
                 "kind": "confirmation_required",
-                "exit_code": 2,
+                "exit_code": 1,
                 "retryable": false,
                 "description": "A mutating command was invoked non-interactively without --yes."
             },
@@ -520,14 +514,6 @@ mod tests {
                 "command '{name}' is missing 'mutating' field"
             );
         }
-    }
-
-    #[test]
-    fn schema_errors_has_conflict_kind() {
-        let schema = generate();
-        let errors = schema["errors"].as_array().unwrap();
-        let has_conflict = errors.iter().any(|e| e["kind"] == "conflict");
-        assert!(has_conflict, "errors array must include kind='conflict'");
     }
 
     #[test]
