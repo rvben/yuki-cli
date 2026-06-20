@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+## [0.1.7](https://github.com/rvben/yuki-cli/compare/v0.1.6...v0.1.7) - 2026-06-20
+
+### Fixed
+
+- **schema**: correct exit-code declarations ([e53abec](https://github.com/rvben/yuki-cli/commit/e53abec7184e46e5edb7e059636eb1c8656be917))
+
 ## [0.1.6](https://github.com/rvben/yuki-cli/compare/v0.1.5...v0.1.6) - 2026-06-11
 
 ### Added
