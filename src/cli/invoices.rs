@@ -4,7 +4,7 @@ use crate::client::sales::SalesClient;
 use crate::config::Config;
 use crate::error::YukiError;
 use crate::output::{
-    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty, select_fields,
 };
 
 pub async fn list(
@@ -22,7 +22,7 @@ pub async fn list(
             let (client, entry) = setup_domain(config, admin).await?;
             let items = client.outstanding_creditor_items(&entry.admin_id).await?;
 
-            let headers = vec![
+            let mut headers = vec![
                 "Contact".into(),
                 "Description".into(),
                 "Date".into(),
@@ -42,6 +42,7 @@ pub async fn list(
                 })
                 .collect();
             apply_pagination(&mut rows, &opts);
+            select_fields(&mut headers, &mut rows, &opts)?;
 
             match fmt {
                 OutputFormat::Table => println!("{}", format_table(&headers, &rows)),
@@ -55,12 +56,13 @@ pub async fn list(
             client.authenticate(&config.api_key).await?;
             let items = client.get_sales_items().await?;
 
-            let headers = vec!["ID".into(), "Description".into()];
+            let mut headers = vec!["ID".into(), "Description".into()];
             let mut rows: Vec<Vec<String>> = items
                 .iter()
                 .map(|i| vec![i.id.clone(), i.description.clone()])
                 .collect();
             apply_pagination(&mut rows, &opts);
+            select_fields(&mut headers, &mut rows, &opts)?;
 
             match fmt {
                 OutputFormat::Table => println!("{}", format_table(&headers, &rows)),

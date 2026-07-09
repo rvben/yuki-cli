@@ -2,7 +2,7 @@ use crate::client::accounting::AccountingClient;
 use crate::config::Config;
 use crate::error::YukiError;
 use crate::output::{
-    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty, select_fields,
 };
 
 pub async fn list(
@@ -14,13 +14,14 @@ pub async fn list(
     client.authenticate(&config.api_key).await?;
     let admins = client.administrations().await?;
 
-    let headers = vec!["Name".into(), "Admin ID".into(), "Domain ID".into()];
+    let mut headers = vec!["Name".into(), "Admin ID".into(), "Domain ID".into()];
     let mut rows: Vec<Vec<String>> = admins
         .iter()
         .map(|a| vec![a.name.clone(), a.id.clone(), a.domain_id.clone()])
         .collect();
 
     apply_pagination(&mut rows, &opts);
+    select_fields(&mut headers, &mut rows, &opts)?;
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {

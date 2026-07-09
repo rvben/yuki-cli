@@ -61,20 +61,49 @@ impl ContactClient {
         parse_contacts(&body)
     }
 
-    /// Retrieve suppliers and customers filtered by contact type.
+    /// Fetch one page of suppliers and customers. Pages are 1-based.
+    pub async fn get_suppliers_and_customers_page(
+        &self,
+        contact_type: &str,
+        page_number: u32,
+    ) -> Result<Vec<Contact>, YukiError> {
+        let session = self.require_session()?;
+        let envelope = suppliers_envelope(session, contact_type, page_number);
+        let body = self.soap.call("GetSuppliersAndCustomers", envelope).await?;
+        parse_contacts(&body)
+    }
+
+    /// Retrieve every supplier and customer of the given type, following pagination.
+    ///
+    /// The API returns a fixed-size page; without `pageNumber` only the first page is
+    /// ever returned, which silently truncates larger address books.
     pub async fn get_suppliers_and_customers(
         &self,
         contact_type: &str,
     ) -> Result<Vec<Contact>, YukiError> {
-        let session = self.require_session()?;
-        let envelope = SoapEnvelope::new("GetSuppliersAndCustomers")
-            .session(session)
-            .param("contactType", contact_type)
-            .build();
-        let body = self.soap.call("GetSuppliersAndCustomers", envelope).await?;
-        parse_contacts(&body)
+        let mut collected: Vec<Contact> = Vec::new();
+        let mut page = 1;
+        loop {
+            let batch = self
+                .get_suppliers_and_customers_page(contact_type, page)
+                .await?;
+            if batch.is_empty() {
+                break;
+            }
+            let received = batch.len();
+            collected.extend(batch);
+            // A short page means the last page was reached.
+            if received < CONTACT_PAGE_SIZE {
+                break;
+            }
+            page += 1;
+        }
+        Ok(collected)
     }
 }
+
+/// Records returned per `GetSuppliersAndCustomers` page, fixed by the API.
+const CONTACT_PAGE_SIZE: usize = 100;
 
 /// Parse a SearchContacts or GetSuppliersAndCustomers SOAP response into a list of contacts.
 ///
@@ -168,5 +197,52 @@ pub fn parse_contacts(xml: &str) -> Result<Vec<Contact>, YukiError> {
 impl Default for ContactClient {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Build the `GetSuppliersAndCustomers` envelope for a single page.
+///
+/// Every element the schema declares is sent. Omitting `pageNumber` pins the request
+/// to the first page; omitting `contactType` sends an empty enum value and the whole
+/// request is rejected.
+pub(crate) fn suppliers_envelope(session: &str, contact_type: &str, page_number: u32) -> String {
+    SoapEnvelope::new("GetSuppliersAndCustomers")
+        .session(session)
+        .param("searchOption", "All")
+        .param("searchValue", "")
+        .param("sortOrder", "Name")
+        .param("active", "Both")
+        .param("pageNumber", &page_number.to_string())
+        .param("contactType", contact_type)
+        .build()
+}
+
+#[cfg(test)]
+mod envelope_tests {
+    use super::suppliers_envelope;
+
+    #[test]
+    fn sends_the_requested_page_number() {
+        // Regression: pageNumber was never sent, so only the first 100 contacts
+        // were ever returned and larger address books were silently truncated.
+        let xml = suppliers_envelope("sess", "Supplier", 3);
+        assert!(xml.contains("pageNumber"), "{xml}");
+        assert!(
+            xml.contains(">3<"),
+            "page number must reach the request: {xml}"
+        );
+    }
+
+    #[test]
+    fn sends_a_non_empty_contact_type() {
+        // Regression: an empty ContactType is not a member of Yuki's enum and the
+        // API rejects the entire request with a schema validation fault.
+        let xml = suppliers_envelope("sess", "Both", 1);
+        assert!(xml.contains("contactType"), "{xml}");
+        assert!(
+            !xml.contains("<yuki:contactType></yuki:contactType>"),
+            "{xml}"
+        );
+        assert!(!xml.contains("<yuki:contactType/>"), "{xml}");
     }
 }

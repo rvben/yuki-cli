@@ -66,12 +66,17 @@ impl ArchiveClient {
         self.soap.authenticate(api_key).await
     }
 
-    /// List all documents in an archive folder by folder ID.
-    pub async fn documents_in_folder(
+    /// Number of records requested per `DocumentsInFolder` round trip.
+    const FOLDER_PAGE_SIZE: usize = 500;
+
+    /// Fetch one page of documents from an archive folder.
+    pub async fn documents_in_folder_page(
         &self,
         folder_id: i32,
         start_date: &str,
         end_date: &str,
+        number_of_records: usize,
+        start_record: usize,
     ) -> Result<Vec<ArchiveDocument>, YukiError> {
         let session = self.require_session()?;
         let envelope = SoapEnvelope::new("DocumentsInFolder")
@@ -80,11 +85,44 @@ impl ArchiveClient {
             .param("sortOrder", "DocumentDateDesc")
             .param("startDate", start_date)
             .param("endDate", end_date)
-            .param("numberOfRecords", "100")
-            .param("startRecord", "0")
+            .param("numberOfRecords", &number_of_records.to_string())
+            .param("startRecord", &start_record.to_string())
             .build();
         let body = self.soap.call("DocumentsInFolder", envelope).await?;
         Self::parse_archive_documents(&body)
+    }
+
+    /// List documents in an archive folder, paging until the folder is exhausted.
+    ///
+    /// `offset` skips records server-side; `limit` caps the total returned. With no
+    /// limit every document is fetched, so a folder larger than one page is never
+    /// silently truncated.
+    pub async fn documents_in_folder(
+        &self,
+        folder_id: i32,
+        start_date: &str,
+        end_date: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<ArchiveDocument>, YukiError> {
+        let mut collected: Vec<ArchiveDocument> = Vec::new();
+        let mut start_record = offset.unwrap_or(0);
+
+        while let Some(want) = next_page_size(limit, collected.len(), Self::FOLDER_PAGE_SIZE) {
+            let page = self
+                .documents_in_folder_page(folder_id, start_date, end_date, want, start_record)
+                .await?;
+            let received = page.len();
+            collected.extend(page);
+
+            // A short page means the folder is exhausted.
+            if received < want {
+                break;
+            }
+            start_record += received;
+        }
+
+        Ok(collected)
     }
 
     /// List all documents of a given document type.
@@ -456,5 +494,61 @@ impl ArchiveClient {
 impl Default for ArchiveClient {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// How many records to request next, or `None` when the caller's limit is satisfied.
+///
+/// With no limit this always asks for a full page, so a folder larger than one page
+/// keeps paging instead of being silently truncated at the first response.
+pub(crate) fn next_page_size(
+    limit: Option<usize>,
+    collected: usize,
+    page_size: usize,
+) -> Option<usize> {
+    match limit {
+        Some(l) => {
+            let remaining = l.saturating_sub(collected);
+            (remaining > 0).then(|| remaining.min(page_size))
+        }
+        None => Some(page_size),
+    }
+}
+
+#[cfg(test)]
+mod page_tests {
+    use super::next_page_size;
+
+    #[test]
+    fn unlimited_always_requests_a_full_page() {
+        // Regression: numberOfRecords was hardcoded to 100, so folders with more
+        // than 100 documents were truncated with no indication.
+        assert_eq!(next_page_size(None, 0, 500), Some(500));
+        assert_eq!(next_page_size(None, 500, 500), Some(500));
+        assert_eq!(next_page_size(None, 100_000, 500), Some(500));
+    }
+
+    #[test]
+    fn limit_larger_than_page_size_pages_repeatedly() {
+        assert_eq!(next_page_size(Some(1200), 0, 500), Some(500));
+        assert_eq!(next_page_size(Some(1200), 500, 500), Some(500));
+        assert_eq!(next_page_size(Some(1200), 1000, 500), Some(200));
+        assert_eq!(next_page_size(Some(1200), 1200, 500), None);
+    }
+
+    #[test]
+    fn limit_smaller_than_page_size_requests_only_what_is_needed() {
+        assert_eq!(next_page_size(Some(3), 0, 500), Some(3));
+        assert_eq!(next_page_size(Some(3), 3, 500), None);
+    }
+
+    #[test]
+    fn zero_limit_fetches_nothing() {
+        assert_eq!(next_page_size(Some(0), 0, 500), None);
+    }
+
+    #[test]
+    fn overshoot_does_not_underflow() {
+        assert_eq!(next_page_size(Some(5), 9, 500), None);
     }
 }

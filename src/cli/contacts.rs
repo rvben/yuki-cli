@@ -2,7 +2,7 @@ use crate::client::contact::{Contact, ContactClient};
 use crate::config::Config;
 use crate::error::YukiError;
 use crate::output::{
-    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty, select_fields,
 };
 
 fn contacts_to_rows(contacts: &[Contact]) -> Vec<Vec<String>> {
@@ -49,6 +49,29 @@ pub async fn search(
     Ok(())
 }
 
+/// The contact types Yuki's `ContactType` enum accepts.
+const CONTACT_TYPES: &[&str] = &["Customer", "Supplier", "Both", "None"];
+
+/// Normalise a contact type to the exact casing Yuki's schema requires.
+///
+/// Defaults to `Both`. An empty string is not a member of the enum, so passing one
+/// through makes the API reject the whole request with a schema validation fault.
+fn contact_type_value(requested: Option<&str>) -> Result<&'static str, YukiError> {
+    let Some(raw) = requested.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok("Both");
+    };
+    CONTACT_TYPES
+        .iter()
+        .find(|valid| valid.eq_ignore_ascii_case(raw))
+        .copied()
+        .ok_or_else(|| {
+            YukiError::Config(format!(
+                "unknown contact type: {raw} (expected one of: {})",
+                CONTACT_TYPES.join(", ")
+            ))
+        })
+}
+
 pub async fn list(
     config: &Config,
     _admin: Option<&str>,
@@ -56,13 +79,12 @@ pub async fn list(
     format: Option<&str>,
     opts: ListOptions<'_>,
 ) -> Result<(), YukiError> {
+    let contact_type = contact_type_value(contact_type)?;
     let mut client = ContactClient::new();
     client.authenticate(&config.api_key).await?;
-    let contacts = client
-        .get_suppliers_and_customers(contact_type.unwrap_or(""))
-        .await?;
+    let contacts = client.get_suppliers_and_customers(contact_type).await?;
 
-    let headers = vec![
+    let mut headers = vec![
         "ID".into(),
         "Name".into(),
         "Type".into(),
@@ -72,6 +94,7 @@ pub async fn list(
     ];
     let mut rows = contacts_to_rows(&contacts);
     apply_pagination(&mut rows, &opts);
+    select_fields(&mut headers, &mut rows, &opts)?;
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {
@@ -79,4 +102,32 @@ pub async fn list(
         OutputFormat::Json => println!("{}", format_json(&headers, &rows)),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_to_both_when_unset() {
+        // Regression: `unwrap_or("")` sent an empty ContactType, which Yuki rejects
+        // with a schema validation fault, breaking `contacts list` entirely.
+        assert_eq!(contact_type_value(None).unwrap(), "Both");
+        assert_eq!(contact_type_value(Some("")).unwrap(), "Both");
+        assert_eq!(contact_type_value(Some("   ")).unwrap(), "Both");
+    }
+
+    #[test]
+    fn normalises_casing_to_the_schema() {
+        assert_eq!(contact_type_value(Some("customer")).unwrap(), "Customer");
+        assert_eq!(contact_type_value(Some("SUPPLIER")).unwrap(), "Supplier");
+        assert_eq!(contact_type_value(Some("Both")).unwrap(), "Both");
+        assert_eq!(contact_type_value(Some("none")).unwrap(), "None");
+    }
+
+    #[test]
+    fn rejects_values_outside_the_enum() {
+        let err = contact_type_value(Some("vendor")).unwrap_err();
+        assert!(err.to_string().contains("unknown contact type"));
+    }
 }

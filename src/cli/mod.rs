@@ -201,11 +201,12 @@ pub enum InvoiceCommands {
 pub enum DocumentCommands {
     /// List documents in a folder or of a given type.
     List {
-        /// Archive folder name.
+        /// Archive folder: uitzoeken, inkoop, verkoop, bank, personeel, belasting,
+        /// overig-financieel, or a numeric folder ID.
         #[arg(long)]
         folder: Option<String>,
 
-        /// Document type filter.
+        /// Document type filter (numeric document type ID).
         #[arg(long)]
         doc_type: Option<String>,
 

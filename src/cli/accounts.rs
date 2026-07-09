@@ -4,7 +4,7 @@ use crate::client::accounting_info::AccountingInfoClient;
 use crate::config::Config;
 use crate::error::YukiError;
 use crate::output::{
-    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
+    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty, select_fields,
 };
 use crate::period::parse_period;
 
@@ -53,7 +53,7 @@ pub async fn transactions(
         .await?;
     let transactions = AccountingClient::parse_gl_transactions(&xml)?;
 
-    let headers = vec![
+    let mut headers = vec![
         "ID".into(),
         "Date".into(),
         "Amount".into(),
@@ -71,6 +71,7 @@ pub async fn transactions(
         })
         .collect();
     apply_pagination(&mut rows, &opts);
+    select_fields(&mut headers, &mut rows, &opts)?;
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {

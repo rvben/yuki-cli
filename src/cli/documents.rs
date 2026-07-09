@@ -1,9 +1,17 @@
 use crate::client::archive::ArchiveClient;
 use crate::config::Config;
 use crate::error::YukiError;
-use crate::output::{
-    ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty,
-};
+use crate::folders;
+use crate::output::{ListOptions, OutputFormat, format_json, format_table, is_tty, select_fields};
+
+/// Parse a document type, which Yuki identifies by a numeric ID.
+fn doc_type_id(value: &str) -> Result<i32, YukiError> {
+    value.trim().parse::<i32>().map_err(|_| {
+        YukiError::Config(format!(
+            "invalid document type: {value} (expected a numeric document type ID)"
+        ))
+    })
+}
 
 pub async fn list(
     config: &Config,
@@ -16,16 +24,22 @@ pub async fn list(
     let mut client = ArchiveClient::new();
     client.authenticate(&config.api_key).await?;
 
+    // Offset and limit are pushed into the API request, so no client-side slicing.
     let docs = match (folder, doc_type) {
         (Some(f), _) => {
-            let folder_id: i32 = f.parse().unwrap_or(0);
+            let folder_id = folders::folder_id(f)?;
             client
-                .documents_in_folder(folder_id, "2000-01-01", "2099-12-31")
+                .documents_in_folder(
+                    folder_id,
+                    "2000-01-01",
+                    "2099-12-31",
+                    opts.limit,
+                    opts.offset,
+                )
                 .await?
         }
         (None, Some(t)) => {
-            let doc_type_id: i32 = t.parse().unwrap_or(0);
-            let xml = client.documents_by_type(doc_type_id).await?;
+            let xml = client.documents_by_type(doc_type_id(t)?).await?;
             // documents_by_type returns raw XML; wrap it for display
             let headers = vec!["Raw XML".into()];
             let rows = vec![vec![xml]];
@@ -38,12 +52,12 @@ pub async fn list(
         }
         (None, None) => {
             client
-                .documents_in_folder(0, "2000-01-01", "2099-12-31")
+                .documents_in_folder(0, "2000-01-01", "2099-12-31", opts.limit, opts.offset)
                 .await?
         }
     };
 
-    let headers = vec![
+    let mut headers = vec![
         "ID".into(),
         "Date".into(),
         "Amount".into(),
@@ -64,7 +78,7 @@ pub async fn list(
             ]
         })
         .collect();
-    apply_pagination(&mut rows, &opts);
+    select_fields(&mut headers, &mut rows, &opts)?;
 
     let fmt = OutputFormat::from_flag(format, is_tty());
     match fmt {

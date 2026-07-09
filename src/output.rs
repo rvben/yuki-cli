@@ -1,3 +1,4 @@
+use crate::error::YukiError;
 use comfy_table::{Cell, Color, Table, presets::UTF8_FULL_CONDENSED};
 use serde_json::{Map, Value, json};
 
@@ -21,6 +22,51 @@ pub fn apply_pagination(rows: &mut Vec<Vec<String>>, opts: &ListOptions<'_>) {
     if let Some(lim) = opts.limit {
         rows.truncate(lim);
     }
+}
+
+/// Restrict `headers` and `rows` to the comma-separated columns named in `opts.fields`.
+///
+/// Column names match case-insensitively and keep the order the caller asked for.
+/// An unrecognised name is an error: emitting the full row set for `--fields bogus`
+/// makes an unsupported query indistinguishable from a satisfied one.
+pub fn select_fields(
+    headers: &mut Vec<String>,
+    rows: &mut [Vec<String>],
+    opts: &ListOptions<'_>,
+) -> Result<(), YukiError> {
+    let Some(spec) = opts.fields else {
+        return Ok(());
+    };
+
+    let mut indices = Vec::new();
+    let mut selected = Vec::new();
+    for requested in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let position = headers
+            .iter()
+            .position(|h| h.eq_ignore_ascii_case(requested))
+            .ok_or_else(|| {
+                YukiError::Config(format!(
+                    "unknown field: {requested} (available: {})",
+                    headers.join(", ")
+                ))
+            })?;
+        indices.push(position);
+        selected.push(headers[position].clone());
+    }
+    if indices.is_empty() {
+        return Err(YukiError::Config(
+            "--fields was given no column names".to_string(),
+        ));
+    }
+
+    for row in rows.iter_mut() {
+        *row = indices
+            .iter()
+            .map(|&i| row.get(i).cloned().unwrap_or_default())
+            .collect();
+    }
+    *headers = selected;
+    Ok(())
 }
 
 pub enum OutputFormat {

@@ -19,19 +19,7 @@ pub struct UploadOptions<'a> {
     pub currency: &'a str,
 }
 
-/// Map a folder name to its Yuki archive folder ID.
-fn folder_id(name: &str) -> Result<i32, YukiError> {
-    match name {
-        "inkoop" | "purchase" => Ok(1),
-        "verkoop" | "sales" => Ok(2),
-        "bank" => Ok(3),
-        "personeel" | "personnel" => Ok(4),
-        "belasting" | "tax" => Ok(5),
-        "uitzoeken" => Ok(7),
-        "overig-financieel" | "other" => Ok(8),
-        _ => Err(YukiError::Config(format!("unknown folder: {name}"))),
-    }
-}
+use crate::folders::folder_id;
 
 /// Upload a document to the Yuki archive.
 ///
