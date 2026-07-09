@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+## [0.1.8](https://github.com/rvben/yuki-cli/compare/v0.1.7...v0.1.8) - 2026-07-09
+
+### Fixed
+
+- **cli**: validate list filters and return complete result sets ([beaadb2](https://github.com/rvben/yuki-cli/commit/beaadb26f947228e169c2996ab463962c11589c3))
+
 ## [0.1.7](https://github.com/rvben/yuki-cli/compare/v0.1.6...v0.1.7) - 2026-06-20
 
 ### Fixed
