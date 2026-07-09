@@ -1,4 +1,4 @@
-.PHONY: build release install test lint fmt run check clean release-patch release-minor release-major
+.PHONY: build release install test lint fmt run check clean publish publish-dry-run release-patch release-minor release-major
 
 build:
 	cargo build --workspace
@@ -23,6 +23,15 @@ run:
 	cargo run --
 
 check: lint test
+
+# Publishes every workspace member in dependency order, so yuki-client reaches
+# crates.io before yuki-cli is verified against it. Members whose version is
+# already published are skipped with a warning.
+publish:
+	cargo publish --workspace --locked
+
+publish-dry-run:
+	cargo publish --workspace --dry-run --locked
 
 clean:
 	cargo clean

@@ -29,7 +29,7 @@ pub async fn list(
         (Some(f), _) => {
             let folder_id = folders::folder_id(f)?;
             client
-                .documents_in_folder(
+                .documents_in_folder_paged(
                     folder_id,
                     "2000-01-01",
                     "2099-12-31",
@@ -52,7 +52,7 @@ pub async fn list(
         }
         (None, None) => {
             client
-                .documents_in_folder(0, "2000-01-01", "2099-12-31", opts.limit, opts.offset)
+                .documents_in_folder_paged(0, "2000-01-01", "2099-12-31", opts.limit, opts.offset)
                 .await?
         }
     };

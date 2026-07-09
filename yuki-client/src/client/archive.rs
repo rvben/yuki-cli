@@ -92,12 +92,23 @@ impl ArchiveClient {
         Self::parse_archive_documents(&body)
     }
 
+    /// List every document in an archive folder.
+    pub async fn documents_in_folder(
+        &self,
+        folder_id: i32,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<ArchiveDocument>, YukiError> {
+        self.documents_in_folder_paged(folder_id, start_date, end_date, None, None)
+            .await
+    }
+
     /// List documents in an archive folder, paging until the folder is exhausted.
     ///
     /// `offset` skips records server-side; `limit` caps the total returned. With no
     /// limit every document is fetched, so a folder larger than one page is never
     /// silently truncated.
-    pub async fn documents_in_folder(
+    pub async fn documents_in_folder_paged(
         &self,
         folder_id: i32,
         start_date: &str,
