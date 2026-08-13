@@ -24,14 +24,14 @@ run:
 
 check: lint test
 
-# Publishes every workspace member in dependency order, so yuki-client reaches
-# crates.io before yuki-cli is verified against it. Members whose version is
-# already published are skipped with a warning.
+# Publish only the release package. The versioned yuki-client dependency is
+# released independently, and Cargo treats an already-published workspace
+# member as a fatal error rather than skipping it.
 publish:
-	cargo publish --workspace --locked
+	cargo publish -p yuki-cli --locked
 
 publish-dry-run:
-	cargo publish --workspace --dry-run --locked
+	cargo publish -p yuki-cli --dry-run --locked
 
 clean:
 	cargo clean

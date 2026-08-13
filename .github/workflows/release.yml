@@ -259,7 +259,7 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          uv tool run twine upload artifacts/wheel-*/*.whl artifacts/sdist/*.tar.gz
+          uv tool run twine upload --skip-existing --verbose artifacts/wheel-*/*.whl artifacts/sdist/*.tar.gz
 
       - name: Test PyPI upload (dry run)
         if: ${{ inputs.dry_run == true && inputs.skip_pypi != true }}
