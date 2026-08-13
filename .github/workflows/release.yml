@@ -192,7 +192,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: |
-            yuki-cli-*-${{ matrix.target }}.tar.gz*
+            yuki-cli-${{ github.ref_name }}-${{ matrix.target }}.tar.gz*
           name: release-${{ matrix.target }}
 
   sdist:
@@ -279,8 +279,8 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            artifacts/release-*/yuki-cli-*.tar.gz
-            artifacts/release-*/yuki-cli-*.tar.gz.sha256
+            artifacts/release-*/yuki-cli-${{ github.ref_name }}-*.tar.gz
+            artifacts/release-*/yuki-cli-${{ github.ref_name }}-*.tar.gz.sha256
 
       - name: Dry Run Summary
         if: ${{ inputs.dry_run == true }}
