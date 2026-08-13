@@ -133,6 +133,9 @@ pub enum Commands {
 
     /// Output JSON schema for agent integration
     Schema,
+
+    /// Describe supported API areas and safety behavior without loading configuration
+    Capabilities,
 }
 
 #[derive(Subcommand)]

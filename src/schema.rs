@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
 pub fn generate() -> Value {
-    json!({
-        "clispec": "0.2",
+    let mut schema = json!({
+        "clispec": "0.3",
         "name": "yuki",
         "version": env!("CARGO_PKG_VERSION"),
         "description": "CLI client for the Yuki bookkeeping API",
@@ -407,6 +407,16 @@ pub fn generate() -> Value {
                 "mutating": false
             },
             {
+                "name": "capabilities",
+                "description": "Describe supported API areas and safety behavior without loading configuration.",
+                "mutating": false,
+                "output_fields": [
+                    {"name":"areas","type":"array","items":{"type":"string"}},
+                    {"name":"structured_output","type":"boolean"},
+                    {"name":"daily_api_limit","type":"integer"}
+                ]
+            },
+            {
                 "name": "completions",
                 "description": "Generate shell completions.",
                 "mutating": false,
@@ -453,7 +463,73 @@ pub fn generate() -> Value {
                 "description": "An unexpected error occurred."
             }
         ]
-    })
+    });
+    enrich_v0_3(&mut schema);
+    schema
+}
+
+fn enrich_v0_3(schema: &mut Value) {
+    schema["output"] = json!({"tty":"text","piped":"json"});
+    let Some(commands) = schema["commands"].as_array_mut() else {
+        return;
+    };
+    for command in commands {
+        let Some(object) = command.as_object_mut() else {
+            continue;
+        };
+        let name = object["name"].as_str().unwrap_or_default().to_string();
+        let mutating = object["mutating"].as_bool().unwrap_or(false);
+        object.insert(
+            "effects".into(),
+            json!(if !mutating {
+                "read_only"
+            } else if name == "upload file" {
+                "non_idempotent"
+            } else {
+                "idempotent"
+            }),
+        );
+        if name == "completions" {
+            object.insert("output_kind".into(), json!("opaque"));
+            object.insert("media_type".into(), json!("text/plain"));
+            continue;
+        }
+        let unbounded = object
+            .get("args")
+            .and_then(Value::as_array)
+            .is_some_and(|args| {
+                args.iter().any(|arg| arg["name"] == "--limit")
+                    && args.iter().any(|arg| arg["name"] == "--offset")
+                    && args.iter().any(|arg| arg["name"] == "--fields")
+            });
+        object.insert(
+            "cardinality".into(),
+            json!(if unbounded { "unbounded" } else { "bounded" }),
+        );
+        if unbounded {
+            object.insert(
+                "pagination".into(),
+                json!({"style":"offset","limit_arg":"--limit","offset_arg":"--offset"}),
+            );
+            object.insert("fields_arg".into(), json!("--fields"));
+        }
+        if mutating {
+            object.insert("confirmation_bypass_arg".into(), json!("--yes"));
+        }
+        if name == "capabilities" {
+            object.insert("example".into(), json!({"args":["capabilities"]}));
+        }
+        if name == "schema" {
+            object.insert("cardinality".into(), json!("single"));
+            object.insert(
+                "stdout_schema".into(),
+                json!({"$ref":"https://clispec.dev/schema/v0.3.json"}),
+            );
+        }
+        if !object.contains_key("output_fields") && !object.contains_key("stdout_schema") {
+            object.insert("stdout_schema".into(), json!({}));
+        }
+    }
 }
 
 pub fn print_schema() {
@@ -494,7 +570,7 @@ mod tests {
     #[test]
     fn schema_clispec_version() {
         let schema = generate();
-        assert_eq!(schema["clispec"], "0.2");
+        assert_eq!(schema["clispec"], "0.3");
     }
 
     #[test]
@@ -559,15 +635,15 @@ mod tests {
     }
 
     #[test]
-    fn schema_validates_against_clispec_v02() {
+    fn schema_validates_against_clispec_v03() {
         let schema_json: Value =
-            serde_json::from_str(include_str!("../tests/fixtures/schema-v0.2.json"))
+            serde_json::from_str(include_str!("../tests/fixtures/schema-v0.3.json"))
                 .expect("parse clispec schema fixture");
 
         let validator = Validator::new(&schema_json).expect("compile clispec schema");
         let output = generate();
         if let Err(e) = validator.validate(&output) {
-            panic!("Schema does not validate against clispec v0.2:\n{e}");
+            panic!("Schema does not validate against clispec v0.3:\n{e}");
         }
     }
 

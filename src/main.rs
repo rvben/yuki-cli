@@ -367,6 +367,27 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             yuki_cli::schema::print_schema();
         }
 
+        Commands::Capabilities => {
+            let value = serde_json::json!({
+                "areas": ["administrations", "vat", "contacts", "accounts", "projects", "invoices", "documents", "checks", "uploads"],
+                "structured_output": true,
+                "daily_api_limit": 1000
+            });
+            if matches!(
+                yuki_cli::output::OutputFormat::from_flag(format, is_tty()),
+                yuki_cli::output::OutputFormat::Json
+            ) {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&value).expect("serialize capabilities")
+                );
+            } else {
+                println!(
+                    "API areas: administrations, VAT, contacts, accounts, projects, invoices, documents, checks, uploads\nDaily API limit: 1000"
+                );
+            }
+        }
+
         Commands::Upload { command } => {
             let config = Config::load()?;
             let admin = cli.admin.as_deref();
