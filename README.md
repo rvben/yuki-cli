@@ -175,3 +175,8 @@ make install  # Install to ~/.cargo/bin/
 ## License
 
 MIT
+
+## Releasing
+
+Vership owns versioning, changelog generation, release commits, and tags. See
+[the release runbook](docs/releases.md) for the verified workflow and recovery policy.
