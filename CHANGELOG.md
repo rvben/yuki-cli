@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.11](https://github.com/rvben/yuki-cli/compare/v0.1.10...v0.1.11) - 2026-08-26
+
+### Added
+
+- **packaging**: add package-named launcher ([61dc1d9](https://github.com/rvben/yuki-cli/commit/61dc1d94e0baf76df8b6dac5eb14e18a416243a6))
+
+### Fixed
+
+- **release**: use package version in dry runs ([5961da1](https://github.com/rvben/yuki-cli/commit/5961da15854f1fc91c68f1b2c47f9c3c2f185d6a))
+- **ci**: install pinned Rust components ([608925e](https://github.com/rvben/yuki-cli/commit/608925ed92833a9593e07e35796afb8208c0d53b))
+- **release**: scope assets to the current tag ([5625350](https://github.com/rvben/yuki-cli/commit/5625350b657acee8a14a440ffabea6bfd11c3feb))
 
 
 
