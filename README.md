@@ -18,9 +18,12 @@ Or via pip:
 
 ```sh
 pip install yuki-cli
+
+# Or run without installing
+uvx yuki-cli --help
 ```
 
-Both install the `yuki` binary.
+PyPI and Cargo installations provide both `yuki` and `yuki-cli` as executable names.
 
 ## Setup
 
