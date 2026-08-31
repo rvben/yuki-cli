@@ -15,14 +15,15 @@ fn doc_type_id(value: &str) -> Result<i32, YukiError> {
 
 pub async fn list(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     folder: Option<&str>,
     doc_type: Option<&str>,
     format: Option<&str>,
     opts: ListOptions<'_>,
 ) -> Result<(), YukiError> {
+    let target = config.target(admin)?;
     let mut client = ArchiveClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
 
     // Offset and limit are pushed into the API request, so no client-side slicing.
     let docs = match (folder, doc_type) {
@@ -90,12 +91,13 @@ pub async fn list(
 
 pub async fn search(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     query: &str,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
+    let target = config.target(admin)?;
     let mut client = ArchiveClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
 
     // Use current year as default search range when no date is specified.
     let year = current_year();
@@ -140,7 +142,7 @@ pub async fn search(
 /// and date proximity (±7 days). Returns matching documents or exit code 3 if none found.
 pub async fn exists(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     amount: f64,
     date: &str,
     contact: Option<&str>,
@@ -148,8 +150,9 @@ pub async fn exists(
 ) -> Result<(), YukiError> {
     let (search_start, search_end, filter_start, filter_end) = date_range(date)?;
 
+    let target = config.target(admin)?;
     let mut client = ArchiveClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
 
     let search_text = contact.unwrap_or("");
     let docs = client

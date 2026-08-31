@@ -9,10 +9,10 @@ pub async fn list(
     admin: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = AccountingInfoClient::new();
-    client.authenticate(&config.api_key).await?;
-    let projects = client.get_projects(&entry.admin_id).await?;
+    client.authenticate(target.api_key).await?;
+    let projects = client.get_projects(target.admin_id).await?;
 
     let headers = vec!["ID".into(), "Code".into(), "Description".into()];
     let rows: Vec<Vec<String>> = projects
@@ -38,11 +38,11 @@ pub async fn balance(
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
     let gl_code = account.unwrap_or("");
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = AccountingInfoClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let balances = client
-        .get_project_balance(&entry.admin_id, project, gl_code, &start, &end)
+        .get_project_balance(target.admin_id, project, gl_code, &start, &end)
         .await?;
 
     let headers = vec!["Project".into(), "GL Account".into(), "Amount".into()];

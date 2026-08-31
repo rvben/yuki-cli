@@ -19,8 +19,8 @@ pub async fn list(
 
     match invoice_type {
         Some("purchase") | Some("creditor") => {
-            let (client, entry) = setup_domain(config, admin).await?;
-            let items = client.outstanding_creditor_items(&entry.admin_id).await?;
+            let (client, target) = setup_domain(config, admin).await?;
+            let items = client.outstanding_creditor_items(target.admin_id).await?;
 
             let mut headers = vec![
                 "Contact".into(),
@@ -52,8 +52,9 @@ pub async fn list(
 
         // Default to sales invoices when type is "sales", "debtor", or unspecified
         _ => {
+            let target = config.target(admin)?;
             let mut client = SalesClient::new();
-            client.authenticate(&config.api_key).await?;
+            client.authenticate(target.api_key).await?;
             let items = client.get_sales_items().await?;
 
             let mut headers = vec!["ID".into(), "Description".into()];
@@ -80,10 +81,10 @@ pub async fn document(
     id: &str,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = AccountingInfoClient::new();
-    client.authenticate(&config.api_key).await?;
-    let xml = client.get_transaction_document(&entry.admin_id, id).await?;
+    client.authenticate(target.api_key).await?;
+    let xml = client.get_transaction_document(target.admin_id, id).await?;
 
     let result = crate::client::soap_client::SoapClient::parse_single_result(
         &xml,
@@ -104,12 +105,13 @@ pub async fn document(
 
 pub async fn show(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     id: &str,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
+    let target = config.target(admin)?;
     let mut client = AccountingInfoClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let details = client.get_transaction_details(id).await?;
 
     let headers = vec![

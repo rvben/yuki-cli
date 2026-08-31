@@ -35,18 +35,21 @@ pub fn generate() -> Value {
         "commands": [
             {
                 "name": "admin list",
-                "description": "List all available administrations.",
+                "description": "List administrations, reconciling the configuration against every configured access key. Every configured administration is reported, so one no key reaches is visible rather than absent.",
                 "mutating": false,
                 "args": [
+                    {"name": "--local", "type": "boolean", "required": false, "description": "Report what is configured without contacting the API."},
                     {"name": "--limit", "type": "integer", "required": false, "description": "Maximum number of results to return."},
                     {"name": "--offset", "type": "integer", "required": false, "description": "Number of results to skip (for pagination)."},
                     {"name": "--fields", "type": "string", "required": false, "description": "Comma-separated list of fields to include in output."}
                 ],
                 "output_fields": [
-                    {"name": "name", "type": "string"},
+                    {"name": "name", "type": "string", "description": "Display name as Yuki reports it, or - when unknown."},
+                    {"name": "config", "type": "string", "description": "Configuration name, i.e. what --admin accepts."},
                     {"name": "domain_id", "type": "string"},
                     {"name": "admin_id", "type": "string"},
-                    {"name": "default", "type": "boolean"}
+                    {"name": "default", "type": "string", "description": "Yes for the administration used when --admin is omitted, otherwise No."},
+                    {"name": "status", "type": "string", "description": "ok, auth failed, unreachable, not configured, or not checked with --local."}
                 ]
             },
             {
@@ -394,11 +397,12 @@ pub fn generate() -> Value {
             },
             {
                 "name": "init",
-                "description": "Initialize yuki configuration for this machine.",
+                "description": "Initialize yuki configuration for this machine. An access key reaches only the administrations it was created inside, so a second administration needs its own key added with --add.",
                 "mutating": true,
                 "args": [
                     {"name": "--api-key", "type": "string", "required": false, "description": "API key (skips interactive prompt if provided)."},
-                    {"name": "--default-admin", "type": "string", "required": false, "description": "Default administration name (auto-selects if only one available)."}
+                    {"name": "--default-admin", "type": "string", "required": false, "description": "Default administration name (auto-selects if only one available)."},
+                    {"name": "--add", "type": "boolean", "required": false, "description": "Merge the key's administrations into the existing configuration instead of replacing it."}
                 ]
             },
             {

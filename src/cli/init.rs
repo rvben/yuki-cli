@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Write};
 
 use owo_colors::OwoColorize;
 
-use crate::client::accounting::AccountingClient;
+use crate::client::accounting::{AccountingClient, Administration};
 use crate::config::{AdminEntry, Config};
 use crate::error::YukiError;
 use crate::output::is_tty;
@@ -55,12 +55,67 @@ fn safe_name(name: &str) -> String {
         .collect()
 }
 
-pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(), YukiError> {
+/// Index discovered administrations by their config key.
+fn to_entries(admins: &[Administration]) -> BTreeMap<String, AdminEntry> {
+    admins
+        .iter()
+        .map(|a| {
+            (
+                safe_name(&a.name),
+                AdminEntry::new(&a.domain_id, &a.id).with_name(&a.name),
+            )
+        })
+        .collect()
+}
+
+fn read_line(stdin: &io::Stdin) -> String {
+    stdin
+        .lock()
+        .lines()
+        .next()
+        .and_then(|l| l.ok())
+        .map(|l| l.trim().to_string())
+        .unwrap_or_default()
+}
+
+/// Authenticate with `api_key` and list the administrations it reaches.
+async fn discover(api_key: &str) -> Result<Vec<Administration>, YukiError> {
+    eprint!("Authenticating...");
+    io::stderr().flush().ok();
+    let mut client = AccountingClient::new();
+    match client.authenticate(api_key).await {
+        Ok(_) => eprintln!(" {}", sym_ok()),
+        Err(e) => {
+            eprintln!(" {}", sym_fail());
+            return Err(e);
+        }
+    }
+
+    eprint!("Fetching administrations...");
+    io::stderr().flush().ok();
+    match client.administrations().await {
+        Ok(admins) => {
+            eprintln!(" {}", sym_ok());
+            Ok(admins)
+        }
+        Err(e) => {
+            eprintln!(" {}", sym_fail());
+            Err(e)
+        }
+    }
+}
+
+pub async fn run(
+    api_key: Option<&str>,
+    default_admin: Option<&str>,
+    add: bool,
+) -> Result<(), YukiError> {
     let stdin = io::stdin();
     let path = Config::default_path();
 
-    // If config exists and only --api-key is provided, update the key in place.
-    if let (Some(key), None) = (api_key, default_admin)
+    // Rotating the shared key touches nothing else, so it skips discovery entirely.
+    if !add
+        && let (Some(key), None) = (api_key, default_admin)
         && let Ok(mut config) = Config::load_from(&path)
     {
         let key = key.trim().to_string();
@@ -84,13 +139,7 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
             eprintln!("  {} Yuki Portal → Settings → API keys", dim("→"));
             eprint!("Yuki API key: ");
             io::stderr().flush().ok();
-            stdin
-                .lock()
-                .lines()
-                .next()
-                .and_then(|l| l.ok())
-                .map(|l| l.trim().to_string())
-                .unwrap_or_default()
+            read_line(&stdin)
         }
     };
 
@@ -98,30 +147,11 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
         return Err(YukiError::Config("API key cannot be empty".to_string()));
     }
 
-    eprint!("Authenticating...");
-    io::stderr().flush().ok();
-    let mut client = AccountingClient::new();
-    match client.authenticate(&api_key).await {
-        Ok(_) => eprintln!(" {}", sym_ok()),
-        Err(e) => {
-            eprintln!(" {}", sym_fail());
-            return Err(e);
-        }
+    if add {
+        return add_key(&path, &api_key, default_admin).await;
     }
 
-    eprint!("Fetching administrations...");
-    io::stderr().flush().ok();
-    let admins = match client.administrations().await {
-        Ok(admins) => {
-            eprintln!(" {}", sym_ok());
-            admins
-        }
-        Err(e) => {
-            eprintln!(" {}", sym_fail());
-            return Err(e);
-        }
-    };
-
+    let admins = discover(&api_key).await?;
     if admins.is_empty() {
         return Err(YukiError::NotFound(
             "no administrations found for this API key".to_string(),
@@ -134,7 +164,7 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
     }
 
     let default_name = if let Some(name) = default_admin {
-        // Use the provided name directly — verify it exists.
+        // Use the provided name directly, verifying it exists.
         let key = safe_name(name);
         if !admins.iter().any(|a| safe_name(&a.name) == key) {
             return Err(YukiError::Config(format!(
@@ -153,14 +183,7 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
         eprint!("Select default administration [1]: ");
         io::stderr().flush().ok();
 
-        let choice = stdin
-            .lock()
-            .lines()
-            .next()
-            .and_then(|l| l.ok())
-            .map(|l| l.trim().to_string())
-            .unwrap_or_default();
-
+        let choice = read_line(&stdin);
         let idx: usize = if choice.is_empty() {
             1
         } else {
@@ -175,30 +198,43 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
         safe_name(&admins[idx - 1].name)
     };
 
-    // Store both domain_id and admin_id per administration
-    let administrations: BTreeMap<String, AdminEntry> = admins
-        .iter()
-        .map(|a| {
-            (
-                safe_name(&a.name),
-                AdminEntry {
-                    domain_id: a.domain_id.clone(),
-                    admin_id: a.id.clone(),
-                },
-            )
-        })
-        .collect();
+    let administrations = to_entries(&admins);
+    let existing = Config::load_from(&path).ok();
 
-    // Preserve unmatched_ignore from existing config if present.
-    let unmatched_ignore = Config::load_from(&path)
-        .map(|c| c.unmatched_ignore)
-        .unwrap_or_default();
+    // A plain init replaces the administration map, so anything this key cannot reach
+    // is about to disappear. Say which, rather than let a second set of books vanish.
+    if let Some(previous) = &existing {
+        let dropped: Vec<&str> = previous
+            .administrations
+            .iter()
+            .filter(|(name, entry)| {
+                administrations
+                    .get(*name)
+                    .is_none_or(|new| new.admin_id != entry.admin_id)
+            })
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if !dropped.is_empty() {
+            eprintln!();
+            eprintln!(
+                "{} this key does not reach {}, which init removes from the config.",
+                sym_fail(),
+                dropped.join(", ")
+            );
+            eprintln!(
+                "  {}",
+                dim("Run 'yuki init --add --api-key <key>' instead to keep both.")
+            );
+            eprintln!();
+        }
+    }
 
     let config = Config {
         api_key,
         default_admin: default_name.clone(),
         administrations,
-        unmatched_ignore,
+        // Preserve unmatched_ignore from the existing config if present.
+        unmatched_ignore: existing.map(|c| c.unmatched_ignore).unwrap_or_default(),
     };
 
     config.save_to(&path)?;
@@ -217,4 +253,97 @@ pub async fn run(api_key: Option<&str>, default_admin: Option<&str>) -> Result<(
     eprintln!();
 
     Ok(())
+}
+
+/// Merge a second key's administrations into an existing configuration.
+///
+/// A Yuki access key is scoped to the administration it was created in, so this is
+/// how a second set of books becomes reachable: the key is stored against the
+/// administrations it opens, and every command that targets one authenticates with it.
+async fn add_key(
+    path: &std::path::Path,
+    api_key: &str,
+    default_admin: Option<&str>,
+) -> Result<(), YukiError> {
+    // Distinguish "nothing to add to" from a config that exists but will not parse;
+    // the second is a different problem and keeps its own error.
+    if !path.exists() {
+        return Err(YukiError::Config(format!(
+            "no configuration at {}. Run 'yuki init' first; --add extends an existing one.",
+            path.display()
+        )));
+    }
+    let mut config = Config::load_from(path)?;
+
+    let admins = discover(api_key).await?;
+    if admins.is_empty() {
+        return Err(YukiError::NotFound(
+            "no administrations found for this API key".to_string(),
+        ));
+    }
+
+    let (added, updated) = config.merge_administrations(to_entries(&admins), api_key);
+
+    if let Some(name) = default_admin {
+        let key = safe_name(name);
+        if !config.administrations.contains_key(&key) {
+            return Err(YukiError::Config(format!(
+                "administration not found: {name}"
+            )));
+        }
+        config.default_admin = key;
+    }
+
+    config.save_to(path)?;
+
+    eprintln!();
+    for name in &added {
+        eprintln!("{} added {name}", sym_ok());
+    }
+    for name in &updated {
+        eprintln!("{} updated {name}", sym_ok());
+    }
+    eprintln!(
+        "{} Configuration saved to {} (default: {})",
+        sym_ok(),
+        path.display(),
+        config.default_admin
+    );
+    eprintln!();
+    eprintln!("{}:", bold("Next steps"));
+    eprintln!("  yuki admin list                {}", dim("# verify both"));
+    for name in added.iter().chain(updated.iter()) {
+        eprintln!("  yuki --admin {name} documents list");
+    }
+    eprintln!();
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_name_lowercases_and_replaces_punctuation() {
+        assert_eq!(safe_name("Example Holding B.V."), "example_holding_b_v_");
+        // Digits survive; only non-alphanumerics become underscores.
+        assert_eq!(safe_name("Acme 42 B.V."), "acme_42_b_v_");
+    }
+
+    #[test]
+    fn to_entries_records_the_display_name() {
+        let admins = vec![Administration {
+            name: "Example Holding B.V.".into(),
+            id: "admin-1".into(),
+            domain_id: "domain-1".into(),
+        }];
+        let entries = to_entries(&admins);
+        let entry = &entries["example_holding_b_v_"];
+        assert_eq!(entry.name.as_deref(), Some("Example Holding B.V."));
+        assert_eq!(entry.admin_id, "admin-1");
+        assert_eq!(entry.domain_id, "domain-1");
+        // Discovery does not decide which key an entry belongs to; merging does.
+        assert_eq!(entry.api_key, None);
+    }
 }

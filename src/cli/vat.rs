@@ -9,10 +9,10 @@ pub async fn returns(
     year: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = VatClient::new();
-    client.authenticate(&config.api_key).await?;
-    let all_returns = client.vat_return_list(&entry.admin_id).await?;
+    client.authenticate(target.api_key).await?;
+    let all_returns = client.vat_return_list(target.admin_id).await?;
 
     let filtered: Vec<_> = match year {
         Some(y) => all_returns
@@ -53,10 +53,10 @@ pub async fn codes(
     admin: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = VatClient::new();
-    client.authenticate(&config.api_key).await?;
-    let vat_codes = client.active_vat_codes(&entry.admin_id).await?;
+    client.authenticate(target.api_key).await?;
+    let vat_codes = client.active_vat_codes(target.admin_id).await?;
 
     let headers = vec!["Code".into(), "Description".into()];
     let rows: Vec<Vec<String>> = vat_codes

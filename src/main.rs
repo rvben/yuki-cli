@@ -100,20 +100,23 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Commands::Init {
             api_key,
             default_admin,
+            add,
         } => {
-            yuki_cli::cli::init::run(api_key.as_deref(), default_admin.as_deref()).await?;
+            yuki_cli::cli::init::run(api_key.as_deref(), default_admin.as_deref(), add).await?;
         }
 
         Commands::Admin { command } => {
             let config = Config::load()?;
             match command {
                 AdminCommands::List {
+                    local,
                     limit,
                     offset,
                     fields,
                 } => {
                     yuki_cli::cli::admin::list(
                         &config,
+                        local,
                         format,
                         ListOptions {
                             limit,
@@ -421,10 +424,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         .await?;
                 }
                 UploadCommands::Categories => {
-                    yuki_cli::cli::upload::categories(&config, format).await?;
+                    yuki_cli::cli::upload::categories(&config, admin, format).await?;
                 }
                 UploadCommands::PaymentMethods => {
-                    yuki_cli::cli::upload::payment_methods(&config, format).await?;
+                    yuki_cli::cli::upload::payment_methods(&config, admin, format).await?;
                 }
             }
         }

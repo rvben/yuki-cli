@@ -1,5 +1,4 @@
 use crate::cli::setup_domain;
-use crate::client::accounting::AccountingClient;
 use crate::client::archive::ArchiveClient;
 use crate::client::soap_client::SoapClient;
 use crate::client::vat::VatClient;
@@ -16,27 +15,27 @@ pub async fn btw(
     quiet: bool,
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
+    let (accounting_client, target) = setup_domain(config, admin).await?;
 
     if !quiet {
         eprintln!("[1/3] Fetching VAT return list...");
     }
     let mut vat_client = VatClient::new();
-    vat_client.authenticate(&config.api_key).await?;
-    let (accounting_client, entry) = setup_domain(config, admin).await?;
-    let vat_returns = vat_client.vat_return_list(&entry.admin_id).await?;
+    vat_client.authenticate(target.api_key).await?;
+    let vat_returns = vat_client.vat_return_list(target.admin_id).await?;
 
     if !quiet {
         eprintln!("[2/3] Fetching outstanding debtor items...");
     }
     let debtors = accounting_client
-        .outstanding_debtor_items_by_date(&entry.admin_id, &start, &end)
+        .outstanding_debtor_items_by_date(target.admin_id, &start, &end)
         .await?;
 
     if !quiet {
         eprintln!("[3/3] Fetching outstanding creditor items...");
     }
     let creditors = accounting_client
-        .outstanding_creditor_items_by_date(&entry.admin_id, &start, &end)
+        .outstanding_creditor_items_by_date(target.admin_id, &start, &end)
         .await?;
 
     // Build report: VAT returns in period + outstanding items
@@ -133,32 +132,23 @@ pub async fn unmatched(
     if !quiet {
         eprintln!("[1/3] Fetching bank transactions (GL {bank_account})...");
     }
-    let mut accounting_client = AccountingClient::new();
-    accounting_client.authenticate(&config.api_key).await?;
-    let (accounting_client, entry) = {
-        let entry = config.resolve_admin(admin)?;
-        accounting_client
-            .set_current_domain(&entry.domain_id)
-            .await?;
-        (accounting_client, entry)
-    };
-
+    let (accounting_client, target) = setup_domain(config, admin).await?;
     let transactions = accounting_client
-        .gl_account_transactions_and_contact(&entry.admin_id, bank_account, &start, &end)
+        .gl_account_transactions_and_contact(target.admin_id, bank_account, &start, &end)
         .await?;
 
     if !quiet {
         eprintln!("[2/3] Fetching outstanding creditor items...");
     }
     let creditor_items = accounting_client
-        .outstanding_creditor_items(&entry.admin_id)
+        .outstanding_creditor_items(target.admin_id)
         .await?;
 
     if !quiet {
         eprintln!("[3/3] Fetching booked invoices from archive...");
     }
     let mut archive_client = ArchiveClient::new();
-    archive_client.authenticate(&config.api_key).await?;
+    archive_client.authenticate(target.api_key).await?;
     let archive_docs = archive_client.search_documents("", &start, &end).await?;
 
     if !quiet {
@@ -278,9 +268,9 @@ pub async fn outstanding(
     reference: &str,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let (client, entry) = setup_domain(config, admin).await?;
+    let (client, target) = setup_domain(config, admin).await?;
     let xml = client
-        .check_outstanding_item_admin(&entry.admin_id, reference)
+        .check_outstanding_item_admin(target.admin_id, reference)
         .await?;
     let result =
         SoapClient::parse_single_result(&xml, "CheckOutstandingItemAdminResult").unwrap_or(xml);

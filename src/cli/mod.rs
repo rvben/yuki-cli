@@ -12,22 +12,22 @@ pub mod vat;
 use clap::{Parser, Subcommand};
 
 use crate::client::accounting::AccountingClient;
-use crate::config::{AdminEntry, Config};
+use crate::config::{Config, Target};
 use crate::error::YukiError;
 
 /// Authenticate a client and set the active administration domain.
 ///
-/// Returns both the configured client and the resolved `AdminEntry` so callers
-/// can pass `admin_id` to operations that require `administrationID`.
-pub async fn setup_domain(
-    config: &Config,
+/// Returns both the configured client and the resolved `Target` so callers can pass
+/// `admin_id` to operations that require `administrationID`.
+pub async fn setup_domain<'a>(
+    config: &'a Config,
     admin: Option<&str>,
-) -> Result<(AccountingClient, AdminEntry), YukiError> {
-    let entry = config.resolve_admin(admin)?;
+) -> Result<(AccountingClient, Target<'a>), YukiError> {
+    let target = config.target(admin)?;
     let mut client = AccountingClient::new();
-    client.authenticate(&config.api_key).await?;
-    client.set_current_domain(&entry.domain_id).await?;
-    Ok((client, entry))
+    client.authenticate(target.api_key).await?;
+    client.set_current_domain(target.domain_id).await?;
+    Ok((client, target))
 }
 
 /// Top-level CLI entry point for the Yuki bookkeeping API client.
@@ -69,6 +69,12 @@ pub enum Commands {
         /// Default administration name (auto-selects if only one available).
         #[arg(long)]
         default_admin: Option<String>,
+
+        /// Merge the key's administrations into the existing config instead of
+        /// replacing it. Use this to reach a second administration, which Yuki
+        /// exposes only through a key created inside it.
+        #[arg(long)]
+        add: bool,
     },
 
     /// Manage Yuki administrations.
@@ -142,6 +148,10 @@ pub enum Commands {
 pub enum AdminCommands {
     /// List all available administrations.
     List {
+        /// Report what is configured without contacting the API.
+        #[arg(long)]
+        local: bool,
+
         /// Maximum number of results to return.
         #[arg(long)]
         limit: Option<usize>,

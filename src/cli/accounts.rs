@@ -16,8 +16,8 @@ pub async fn balance(
     format: Option<&str>,
 ) -> Result<(), YukiError> {
     let (start, _end) = resolve_period(period)?;
-    let (client, entry) = setup_domain(config, admin).await?;
-    let mut balances = client.gl_account_balances(&entry.admin_id, &start).await?;
+    let (client, target) = setup_domain(config, admin).await?;
+    let mut balances = client.gl_account_balances(target.admin_id, &start).await?;
     // The operation returns every account; narrow to one when --account is given.
     if let Some(code) = account {
         balances.retain(|b| b.code == code);
@@ -47,9 +47,9 @@ pub async fn transactions(
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
     let gl_code = account.unwrap_or("");
-    let (client, entry) = setup_domain(config, admin).await?;
+    let (client, target) = setup_domain(config, admin).await?;
     let xml = client
-        .gl_account_transactions(&entry.admin_id, gl_code, &start, &end)
+        .gl_account_transactions(target.admin_id, gl_code, &start, &end)
         .await?;
     let transactions = AccountingClient::parse_gl_transactions(&xml)?;
 
@@ -86,10 +86,10 @@ pub async fn scheme(
     admin: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = AccountingInfoClient::new();
-    client.authenticate(&config.api_key).await?;
-    let accounts = client.get_gl_account_scheme(&entry.admin_id).await?;
+    client.authenticate(target.api_key).await?;
+    let accounts = client.get_gl_account_scheme(target.admin_id).await?;
 
     let headers = vec!["Code".into(), "Description".into(), "Type".into()];
     let rows: Vec<Vec<String>> = accounts
@@ -119,11 +119,11 @@ pub async fn start_balance(
             &year_str
         }
     };
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = AccountingInfoClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let balances = client
-        .get_start_balance_by_gl_account(&entry.admin_id, bookyear)
+        .get_start_balance_by_gl_account(target.admin_id, bookyear)
         .await?;
 
     let headers = vec!["GL Account".into(), "Description".into(), "Balance".into()];
@@ -147,8 +147,8 @@ pub async fn revenue(
     format: Option<&str>,
 ) -> Result<(), YukiError> {
     let (start, end) = resolve_period(period)?;
-    let (client, entry) = setup_domain(config, admin).await?;
-    let amount = client.net_revenue(&entry.admin_id, &start, &end).await?;
+    let (client, target) = setup_domain(config, admin).await?;
+    let amount = client.net_revenue(target.admin_id, &start, &end).await?;
 
     let headers = vec!["Period".into(), "Net Revenue".into()];
     let rows = vec![vec![format!("{start} to {end}"), amount]];

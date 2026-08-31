@@ -23,12 +23,13 @@ fn contacts_to_rows(contacts: &[Contact]) -> Vec<Vec<String>> {
 
 pub async fn search(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     query: &str,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
+    let target = config.target(admin)?;
     let mut client = ContactClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let contacts = client.search_contacts(query).await?;
 
     let headers = vec![
@@ -74,14 +75,15 @@ fn contact_type_value(requested: Option<&str>) -> Result<&'static str, YukiError
 
 pub async fn list(
     config: &Config,
-    _admin: Option<&str>,
+    admin: Option<&str>,
     contact_type: Option<&str>,
     format: Option<&str>,
     opts: ListOptions<'_>,
 ) -> Result<(), YukiError> {
     let contact_type = contact_type_value(contact_type)?;
+    let target = config.target(admin)?;
     let mut client = ContactClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let contacts = client.get_suppliers_and_customers(contact_type).await?;
 
     let mut headers = vec![

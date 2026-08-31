@@ -43,15 +43,15 @@ pub async fn run(
         .and_then(|n| n.to_str())
         .unwrap_or(file);
 
-    let entry = config.resolve_admin(admin)?;
+    let target = config.target(admin)?;
     let mut client = ArchiveClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
 
     let doc_id = match options.amount {
         Some(amt) => {
             client
                 .upload_document_with_data(
-                    &entry.admin_id,
+                    target.admin_id,
                     filename,
                     &data_base64,
                     fid,
@@ -66,7 +66,7 @@ pub async fn run(
         }
         None => {
             client
-                .upload_document(&entry.admin_id, filename, &data_base64, fid)
+                .upload_document(target.admin_id, filename, &data_base64, fid)
                 .await?
         }
     };
@@ -88,9 +88,14 @@ pub async fn run(
 }
 
 /// List all available cost categories.
-pub async fn categories(config: &Config, format: Option<&str>) -> Result<(), YukiError> {
+pub async fn categories(
+    config: &Config,
+    admin: Option<&str>,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let target = config.target(admin)?;
     let mut client = ArchiveClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let cats = client.cost_categories().await?;
 
     let headers = vec!["ID".to_string(), "Description".to_string()];
@@ -109,9 +114,14 @@ pub async fn categories(config: &Config, format: Option<&str>) -> Result<(), Yuk
 }
 
 /// List all available payment methods.
-pub async fn payment_methods(config: &Config, format: Option<&str>) -> Result<(), YukiError> {
+pub async fn payment_methods(
+    config: &Config,
+    admin: Option<&str>,
+    format: Option<&str>,
+) -> Result<(), YukiError> {
+    let target = config.target(admin)?;
     let mut client = ArchiveClient::new();
-    client.authenticate(&config.api_key).await?;
+    client.authenticate(target.api_key).await?;
     let methods = client.payment_methods().await?;
 
     let headers = vec!["ID".to_string(), "Description".to_string()];

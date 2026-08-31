@@ -46,6 +46,31 @@ To rotate your API key later:
 yuki init --api-key <new-key>
 ```
 
+### Reaching more than one administration
+
+Yuki issues an access key *inside* one administration and scopes the session it opens
+to that administration. A key created in company A therefore cannot see company B,
+even when the same person owns both. Create a second key in the Yuki portal of the
+other administration (**Settings > API keys**), then add it:
+
+```sh
+yuki init --add --api-key <second-key>
+```
+
+`--add` merges what the new key reaches into the existing config instead of replacing
+it, and records the key on the administrations only that key can reach. After that a
+single CLI covers both, and `--admin <name>` picks between them:
+
+```sh
+yuki admin list                           # every configured administration, with status
+yuki documents search "loonstrook" --admin holding_b_v
+```
+
+`yuki admin list` contacts each configured key once and reports every configured
+administration, so one that no key can reach shows up with a `Status` of `auth failed`
+rather than silently disappearing from the list. Use `--local` to see the
+configuration without any API call.
+
 ## Quick start: find missing invoices
 
 The main workflow is finding bank transactions that don't have a matching invoice in Yuki:
@@ -151,6 +176,7 @@ The `documents exists` command exits with code 3 when no matching document is fo
 `~/.config/yuki/config.toml`:
 
 ```toml
+# Used by any administration that does not carry a key of its own.
 api_key = "your-api-key"
 default_admin = "company_name"
 
@@ -163,7 +189,18 @@ unmatched_ignore = [
 [administrations.company_name]
 domain_id = "domain-uuid"
 admin_id = "admin-uuid"
+name = "Example Trading B.V."
+
+[administrations.holding_b_v]
+domain_id = "other-domain-uuid"
+admin_id = "other-admin-uuid"
+name = "Example Holding B.V."
+# Written by `yuki init --add`, because the shared key above cannot reach this one.
+api_key = "second-api-key"
 ```
+
+`name` and the per-administration `api_key` are optional. An administration without
+its own key uses the shared one, so rotating the shared key keeps reaching it.
 
 ## Development
 
