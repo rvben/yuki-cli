@@ -1,3 +1,4 @@
+pub mod account;
 pub mod accounts;
 pub mod admin;
 pub mod check;
@@ -39,7 +40,7 @@ pub async fn setup_domain<'a>(
 )]
 pub struct Cli {
     /// Override the active administration by name.
-    #[arg(long = "admin", global = true)]
+    #[arg(long = "profile", visible_alias = "admin", global = true)]
     pub admin: Option<String>,
 
     /// Output format: auto, text, or json.
@@ -75,6 +76,31 @@ pub enum Commands {
         /// exposes only through a key created inside it.
         #[arg(long)]
         add: bool,
+    },
+
+    /// Manage authentication.
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommands,
+    },
+
+    /// Manage configuration profiles (Yuki administrations).
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommands,
+    },
+
+    /// Inspect configuration.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
+
+    /// Check configuration and Yuki connectivity.
+    Doctor {
+        /// Check local configuration without contacting Yuki.
+        #[arg(long)]
+        offline: bool,
     },
 
     /// Manage Yuki administrations.
@@ -142,6 +168,58 @@ pub enum Commands {
 
     /// Describe supported API areas and safety behavior without loading configuration
     Capabilities,
+}
+
+#[derive(Subcommand)]
+pub enum AuthCommands {
+    /// Configure an API key and discover its administrations.
+    Login {
+        /// API key (skips interactive prompt if provided).
+        #[arg(long)]
+        api_key: Option<String>,
+
+        /// Default administration name (auto-selects if only one available).
+        #[arg(long)]
+        default_admin: Option<String>,
+
+        /// Merge the key's administrations into the existing configuration.
+        #[arg(long)]
+        add: bool,
+    },
+
+    /// Show whether the selected profile is configured and valid.
+    Status {
+        /// Check local configuration without contacting Yuki.
+        #[arg(long)]
+        offline: bool,
+    },
+
+    /// Remove credentials for the selected profile.
+    Logout,
+}
+
+#[derive(Subcommand)]
+pub enum ProfileCommands {
+    /// List locally configured administration profiles.
+    List,
+    /// Select the default administration profile.
+    Use {
+        /// Profile name to select.
+        name: String,
+    },
+    /// Remove an administration profile.
+    Remove {
+        /// Profile name to remove.
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Show configuration without revealing API keys.
+    Show,
+    /// Print the configuration file path.
+    Path,
 }
 
 #[derive(Subcommand)]

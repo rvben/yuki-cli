@@ -6,8 +6,9 @@ use owo_colors::OwoColorize;
 use yuki_cli::cli::Cli;
 use yuki_cli::cli::Commands;
 use yuki_cli::cli::{
-    AccountCommands, AdminCommands, CheckCommands, ContactCommands, DocumentCommands,
-    InvoiceCommands, ProjectCommands, UploadCommands, VatCommands,
+    AccountCommands, AdminCommands, AuthCommands, CheckCommands, ConfigCommands, ContactCommands,
+    DocumentCommands, InvoiceCommands, ProfileCommands, ProjectCommands, UploadCommands,
+    VatCommands,
 };
 use yuki_cli::config::Config;
 use yuki_cli::error::YukiError;
@@ -16,6 +17,7 @@ use yuki_cli::output::{ListOptions, format_error_json, is_tty};
 enum AppError {
     Yuki(YukiError),
     Other(anyhow::Error),
+    ConfirmationRequired(String),
 }
 
 impl fmt::Display for AppError {
@@ -23,6 +25,7 @@ impl fmt::Display for AppError {
         match self {
             Self::Yuki(e) => write!(f, "{e}"),
             Self::Other(e) => write!(f, "{e}"),
+            Self::ConfirmationRequired(message) => write!(f, "{message}"),
         }
     }
 }
@@ -44,6 +47,7 @@ impl AppError {
         match self {
             Self::Yuki(e) => e.exit_code(),
             Self::Other(_) => 1,
+            Self::ConfirmationRequired(_) => 1,
         }
     }
 
@@ -57,6 +61,7 @@ impl AppError {
                 _ => "error",
             },
             Self::Other(_) => "error",
+            Self::ConfirmationRequired(_) => "confirmation_required",
         }
     }
 }
@@ -102,7 +107,89 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             default_admin,
             add,
         } => {
-            yuki_cli::cli::init::run(api_key.as_deref(), default_admin.as_deref(), add).await?;
+            yuki_cli::cli::init::run(
+                api_key.as_deref(),
+                default_admin.as_deref().or(cli.admin.as_deref()),
+                add,
+            )
+            .await?;
+        }
+
+        Commands::Auth { command } => match command {
+            AuthCommands::Login {
+                api_key,
+                default_admin,
+                add,
+            } => {
+                yuki_cli::cli::init::run(
+                    api_key.as_deref(),
+                    default_admin.as_deref().or(cli.admin.as_deref()),
+                    add,
+                )
+                .await?;
+            }
+            AuthCommands::Status { offline } => {
+                let config = Config::load()?;
+                yuki_cli::cli::account::auth_status(
+                    &config,
+                    cli.admin.as_deref(),
+                    offline,
+                    format,
+                    cli.quiet,
+                )
+                .await?;
+            }
+            AuthCommands::Logout => {
+                let mut config = Config::load()?;
+                yuki_cli::cli::account::auth_logout(
+                    &mut config,
+                    cli.admin.as_deref(),
+                    format,
+                    cli.quiet,
+                )?;
+            }
+        },
+
+        Commands::Profile { command } => {
+            let mut config = Config::load()?;
+            match command {
+                ProfileCommands::List => {
+                    yuki_cli::cli::account::profile_list(&config, format, cli.quiet);
+                }
+                ProfileCommands::Use { name } => {
+                    yuki_cli::cli::account::profile_use(&mut config, &name, format, cli.quiet)?;
+                }
+                ProfileCommands::Remove { name } => {
+                    if !cli.yes {
+                        return Err(AppError::ConfirmationRequired(
+                            "profile removal requires --yes".into(),
+                        ));
+                    }
+                    yuki_cli::cli::account::profile_remove(&mut config, &name, format, cli.quiet)?;
+                }
+            }
+        }
+
+        Commands::Config { command } => match command {
+            ConfigCommands::Show => {
+                let config = Config::load()?;
+                yuki_cli::cli::account::config_show(&config, format, cli.quiet);
+            }
+            ConfigCommands::Path => {
+                yuki_cli::cli::account::config_path(format, cli.quiet);
+            }
+        },
+
+        Commands::Doctor { offline } => {
+            let config = Config::load()?;
+            yuki_cli::cli::account::doctor(
+                &config,
+                cli.admin.as_deref(),
+                offline,
+                format,
+                cli.quiet,
+            )
+            .await?;
         }
 
         Commands::Admin { command } => {
@@ -407,9 +494,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 } => {
                     // Require explicit confirmation for non-interactive uploads.
                     if !is_tty() && !cli.yes {
-                        return Err(AppError::Yuki(YukiError::Config(
+                        return Err(AppError::ConfirmationRequired(
                             "upload file is a mutating operation; pass --yes to confirm in non-interactive mode".into(),
-                        )));
+                        ));
                     }
                     let options = yuki_cli::cli::upload::UploadOptions {
                         folder: &folder,

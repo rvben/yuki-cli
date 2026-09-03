@@ -15,9 +15,9 @@ pub fn generate() -> Value {
                 "default": "auto"
             },
             {
-                "name": "--admin",
+                "name": "--profile",
                 "type": "string",
-                "description": "Override the active administration by name."
+                "description": "Override the active administration profile by name (alias: --admin)."
             },
             {
                 "name": "--quiet",
@@ -406,6 +406,120 @@ pub fn generate() -> Value {
                 ]
             },
             {
+                "name": "auth login",
+                "description": "Configure an API key and discover its administrations. Equivalent to init.",
+                "mutating": true,
+                "args": [
+                    {"name": "--api-key", "type": "string", "required": false, "description": "API key (skips interactive prompt if provided)."},
+                    {"name": "--default-admin", "type": "string", "required": false, "description": "Default administration name."},
+                    {"name": "--add", "type": "boolean", "required": false, "description": "Merge the key's administrations into the existing configuration."}
+                ]
+            },
+            {
+                "name": "auth status",
+                "description": "Show whether the selected administration profile is configured and valid.",
+                "mutating": false,
+                "args": [
+                    {"name": "--offline", "type": "boolean", "required": false, "description": "Check local configuration without contacting Yuki."}
+                ],
+                "output_fields": [
+                    {"name": "profile", "type": "string"},
+                    {"name": "status", "type": "string"},
+                    {"name": "configured", "type": "boolean"},
+                    {"name": "verified", "type": "boolean"},
+                    {"name": "credential_source", "type": "string"}
+                ]
+            },
+            {
+                "name": "auth logout",
+                "description": "Disable the stored API key for the selected administration profile without affecting other profiles.",
+                "mutating": true,
+                "output_fields": [
+                    {"name": "profile", "type": "string"},
+                    {"name": "logged_out", "type": "boolean"},
+                    {"name": "credential_removed", "type": "boolean"},
+                    {"name": "environment_override", "type": "boolean"}
+                ]
+            },
+            {
+                "name": "profile list",
+                "description": "List locally configured administration profiles.",
+                "mutating": false,
+                "output_fields": [
+                    {"name": "items", "type": "array", "items": {"type": "object", "fields": [
+                        {"name": "name", "type": "string"},
+                        {"name": "display_name", "type": "string"},
+                        {"name": "active", "type": "boolean"},
+                        {"name": "admin_id", "type": "string"},
+                        {"name": "domain_id", "type": "string"},
+                        {"name": "configured", "type": "boolean"},
+                        {"name": "credential_source", "type": "string"}
+                    ]}},
+                    {"name": "total", "type": "integer"}
+                ]
+            },
+            {
+                "name": "profile use",
+                "description": "Select the default administration profile. Equivalent to admin switch.",
+                "mutating": true,
+                "args": [
+                    {"name": "name", "type": "string", "required": true, "description": "Profile name to select."}
+                ],
+                "output_fields": [
+                    {"name": "profile", "type": "string"},
+                    {"name": "active", "type": "boolean"}
+                ]
+            },
+            {
+                "name": "profile remove",
+                "description": "Remove an administration profile.",
+                "mutating": true,
+                "args": [
+                    {"name": "name", "type": "string", "required": true, "description": "Profile name to remove."}
+                ],
+                "output_fields": [
+                    {"name": "profile", "type": "string"},
+                    {"name": "removed", "type": "boolean"}
+                ]
+            },
+            {
+                "name": "config show",
+                "description": "Show configuration without revealing API keys.",
+                "mutating": false,
+                "output_fields": [
+                    {"name": "config_file", "type": "string"},
+                    {"name": "file_exists", "type": "boolean"},
+                    {"name": "active_profile", "type": "string"},
+                    {"name": "profiles", "type": "object"},
+                    {"name": "shared_api_key_configured", "type": "boolean"}
+                ]
+            },
+            {
+                "name": "config path",
+                "description": "Print the configuration file path.",
+                "mutating": false,
+                "output_fields": [
+                    {"name": "config_path", "type": "string"}
+                ]
+            },
+            {
+                "name": "doctor",
+                "description": "Check configuration and Yuki connectivity.",
+                "mutating": false,
+                "args": [
+                    {"name": "--offline", "type": "boolean", "required": false, "description": "Check local configuration without contacting Yuki."}
+                ],
+                "output_fields": [
+                    {"name": "ok", "type": "boolean"},
+                    {"name": "offline", "type": "boolean"},
+                    {"name": "checks", "type": "array", "items": {"type": "object", "fields": [
+                        {"name": "name", "type": "string"},
+                        {"name": "ok", "type": "boolean"},
+                        {"name": "detail", "type": "string"}
+                    ]}}
+                ]
+            },
+            {
                 "name": "schema",
                 "description": "Output JSON schema for agent integration.",
                 "mutating": false
@@ -517,7 +631,7 @@ fn enrich_v0_3(schema: &mut Value) {
             );
             object.insert("fields_arg".into(), json!("--fields"));
         }
-        if mutating {
+        if matches!(name.as_str(), "upload file" | "profile remove") {
             object.insert("confirmation_bypass_arg".into(), json!("--yes"));
         }
         if name == "capabilities" {
@@ -636,6 +750,10 @@ mod tests {
         assert!(names.contains(&"admin list"), "missing 'admin list'");
         assert!(names.contains(&"vat returns"), "missing 'vat returns'");
         assert!(names.contains(&"invoices list"), "missing 'invoices list'");
+        assert!(names.contains(&"auth status"), "missing 'auth status'");
+        assert!(names.contains(&"profile list"), "missing 'profile list'");
+        assert!(names.contains(&"config path"), "missing 'config path'");
+        assert!(names.contains(&"doctor"), "missing 'doctor'");
     }
 
     #[test]

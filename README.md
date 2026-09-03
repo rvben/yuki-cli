@@ -34,6 +34,9 @@ PyPI and Cargo installations provide both `yuki` and `yuki-cli` as executable na
 yuki init
 ```
 
+`yuki auth login` is the canonical account command; `yuki init` remains a
+compatible shortcut.
+
 Non-interactive (for scripting):
 
 ```sh
@@ -65,6 +68,11 @@ single CLI covers both, and `--admin <name>` picks between them:
 yuki admin list                           # every configured administration, with status
 yuki documents search "loonstrook" --admin holding_b_v
 ```
+
+Yuki calls these accounting scopes “administrations.” In the shared CLI
+account workflow, an administration is a profile: `--profile` aliases
+`--admin`, `profile list` is the local account view, and `profile use` aliases
+`admin switch`.
 
 `yuki admin list` contacts each configured key once and reports every configured
 administration, so one that no key can reach shows up with a `Status` of `auth failed`
@@ -128,6 +136,27 @@ yuki admin list                           # List administrations
 yuki admin switch <name>                  # Change default administration
 ```
 
+### Authentication and configuration
+
+```sh
+yuki init --profile <name>                # Compatible setup shortcut
+yuki auth login --profile <name>          # Configure and verify an API key
+yuki auth status [--offline] --profile <name>
+yuki auth logout --profile <name>         # Disable only this administration's key
+yuki profile list                         # Local; never contacts Yuki
+yuki profile use <name>
+yuki profile remove <name> --yes
+yuki config show                          # Never reveals API keys
+yuki config path
+yuki doctor [--offline]
+```
+
+`auth status` and `doctor` contact Yuki by default and validate both the API
+key and selected administration. `--offline` checks the stored configuration
+only. Because a Yuki key can serve more than one administration, logout writes
+an explicit disabled credential for the selected profile rather than removing
+a shared key used by other profiles.
+
 ### Gap analysis
 
 ```sh
@@ -153,9 +182,10 @@ yuki upload payment-methods                             # List payment method ID
 
 | Flag | Description |
 |------|-------------|
-| `--admin <name>` | Override default administration |
-| `--format table\|json` | Output format (auto-detects TTY) |
+| `--profile <name>` / `--admin <name>` | Override default administration profile |
+| `--output text\|json` | Output format (auto-detects TTY) |
 | `--quiet` | Suppress informational output |
+| `--yes` | Confirm destructive operations |
 
 ## Periods
 

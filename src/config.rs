@@ -116,8 +116,37 @@ impl Config {
         }
         let content = toml::to_string_pretty(self)
             .map_err(|e| YukiError::Config(format!("serialize error: {e}")))?;
-        std::fs::write(path, content)
-            .map_err(|e| YukiError::Config(format!("failed to write {}: {e}", path.display())))
+        #[cfg(unix)]
+        {
+            use std::io::Write;
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .mode(0o600)
+                .open(path)
+                .map_err(|e| {
+                    YukiError::Config(format!("failed to write {}: {e}", path.display()))
+                })?;
+            file.write_all(content.as_bytes()).map_err(|e| {
+                YukiError::Config(format!("failed to write {}: {e}", path.display()))
+            })?;
+            let mut permissions = file
+                .metadata()
+                .map_err(|e| YukiError::Config(format!("cannot inspect permissions: {e}")))?
+                .permissions();
+            permissions.set_mode(0o600);
+            file.set_permissions(permissions)
+                .map_err(|e| YukiError::Config(format!("cannot secure config file: {e}")))?;
+            Ok(())
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(path, content)
+                .map_err(|e| YukiError::Config(format!("failed to write {}: {e}", path.display())))
+        }
     }
 
     /// Resolve the administration a command should run against.
