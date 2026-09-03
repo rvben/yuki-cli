@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.12](https://github.com/rvben/yuki-cli/compare/v0.1.11...v0.1.12) - 2026-09-03
+
+### Added
+
+- **auth**: standardize authentication workflow ([61d85fb](https://github.com/rvben/yuki-cli/commit/61d85fb2d0d1eefe9a699509187f4200cce5ec13))
+- reach administrations that need their own access key ([115e95d](https://github.com/rvben/yuki-cli/commit/115e95d5e139e7c8dbd1cd2f3f117084a43447ef))
+
 ## [0.1.11](https://github.com/rvben/yuki-cli/compare/v0.1.10...v0.1.11) - 2026-08-26
 
 ### Added

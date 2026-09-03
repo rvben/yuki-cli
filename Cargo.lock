@@ -2227,7 +2227,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-cli"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "base64",
