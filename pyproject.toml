@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "yuki-cli"
 dynamic = ["version"]
-description = "CLI client for the Yuki bookkeeping SOAP API"
+description = "CLI for Nmbrs Accounting (formerly Yuki) SOAP API"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }

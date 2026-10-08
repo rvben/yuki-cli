@@ -2,11 +2,13 @@
 
 [![codecov](https://codecov.io/gh/rvben/yuki-cli/graph/badge.svg)](https://codecov.io/gh/rvben/yuki-cli)
 
-CLI client for the [Yuki](https://www.yukiworks.nl) bookkeeping SOAP API.
+CLI for the [Nmbrs Accounting](https://www.nmbrs.com/nl/accounting/nmbrs-accounting) (formerly Yuki) SOAP API.
 
-[Yuki](https://www.yukiworks.nl) is a Dutch bookkeeping SaaS used for accounting, VAT returns, and document archiving. This CLI lets you query your administration, find missing invoices, and upload documents — from the terminal or as part of automated workflows.
+Yuki is bookkeeping software used in the Netherlands and Belgium for accounting, VAT returns, and document archiving. Its Dutch product became Nmbrs Accounting on 1 September 2026. This CLI lets you query your administration, find missing invoices, and upload documents — from the terminal or as part of automated workflows.
 
-> **Note:** This project is not affiliated with or endorsed by Yuki Software.
+The CLI keeps its `yuki` and `yuki-cli` command names, package names, and existing configuration path for compatibility. References to Yuki below also apply to Nmbrs Accounting in the Netherlands. SOAP endpoints use `api.yukiworks.nl` for Dutch administrations and `api.yukiworks.be` for Belgian administrations.
+
+> **Note:** This project is not affiliated with or endorsed by Nmbrs or Visma.
 
 ## Install
 
@@ -48,6 +50,39 @@ To rotate your API key later:
 ```sh
 yuki init --api-key <new-key>
 ```
+
+### Belgian administrations and mixed regions
+
+For a Belgian administration, select its API region during setup:
+
+```sh
+yuki init --region be
+# The canonical setup command accepts the same option:
+yuki auth login --region be
+```
+
+The region is saved, so subsequent commands such as `yuki doctor` and
+`yuki accounts scheme` use the correct host automatically. Existing configurations
+without a region keep using `nl`. Omitting `--region` during setup reuses the saved
+shared region, or `nl` on first setup.
+
+To add Belgian books alongside existing Dutch books:
+
+```sh
+yuki init --add --region be --api-key <belgian-key>
+yuki accounts scheme --profile <belgian-profile>
+```
+
+`--add` stores the region on the discovered profiles without changing the shared
+region or other profiles. You can also set `region = "be"` in an existing
+`[administrations.<profile>]` section, or at the top of `config.toml` when all
+profiles use the Belgian host. A profile's region overrides the shared region.
+`yuki profile list`, `yuki config show`, and `yuki doctor --offline` expose the
+selected regions without revealing API keys.
+
+Regions are selected explicitly: the CLI does not retry credentials against
+another country's host when authentication fails. A region change during plain
+setup rediscovers the administrations rather than retaining IDs from the old host.
 
 ### Reaching more than one administration
 

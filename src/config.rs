@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::YukiError;
+pub use yuki_client::Region;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminEntry {
@@ -25,6 +26,10 @@ pub struct AdminEntry {
     /// `api_key` is used.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+
+    /// Overrides the shared regional host for this administration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<Region>,
 }
 
 impl AdminEntry {
@@ -34,7 +39,14 @@ impl AdminEntry {
             admin_id: admin_id.into(),
             name: None,
             api_key: None,
+            region: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_region(mut self, region: Region) -> Self {
+        self.region = Some(region);
+        self
     }
 
     #[must_use]
@@ -63,19 +75,24 @@ pub struct Target<'a> {
     pub domain_id: &'a str,
     pub admin_id: &'a str,
     pub api_key: &'a str,
+    pub region: Region,
 }
 
-/// A distinct access key, with the administrations configured to use it.
+/// A distinct (region, access key) pair and the administrations configured to use it.
 #[derive(Debug, Clone)]
 pub struct AccessKey<'a> {
     pub api_key: &'a str,
+    pub region: Region,
     pub admins: Vec<&'a str>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Key used by any administration that does not carry one of its own.
     pub api_key: String,
+    /// Regional host for the shared key and profiles without an override.
+    #[serde(default)]
+    pub region: Region,
     pub default_admin: String,
     pub administrations: BTreeMap<String, AdminEntry>,
     /// Counterparty name patterns to ignore in `check unmatched`.
@@ -174,10 +191,11 @@ impl Config {
             domain_id: &entry.domain_id,
             admin_id: &entry.admin_id,
             api_key,
+            region: entry.region.unwrap_or(self.region),
         })
     }
 
-    /// Every distinct access key in the configuration, each paired with the
+    /// Every distinct (region, access key) pair in the configuration, paired with the
     /// administrations configured to use it.
     ///
     /// The shared key comes first, then per-administration keys in name order, so
@@ -188,6 +206,7 @@ impl Config {
         if !self.api_key.is_empty() {
             keys.push(AccessKey {
                 api_key: &self.api_key,
+                region: self.region,
                 admins: Vec::new(),
             });
         }
@@ -197,10 +216,15 @@ impl Config {
             if api_key.is_empty() {
                 continue;
             }
-            match keys.iter_mut().find(|k| k.api_key == api_key) {
+            let region = entry.region.unwrap_or(self.region);
+            match keys
+                .iter_mut()
+                .find(|k| k.api_key == api_key && k.region == region)
+            {
                 Some(existing) => existing.admins.push(name.as_str()),
                 None => keys.push(AccessKey {
                     api_key,
+                    region,
                     admins: vec![name.as_str()],
                 }),
             }
@@ -232,9 +256,9 @@ impl Config {
         let mut updated = Vec::new();
 
         for (name, mut entry) in discovered {
-            let name = self.free_name(name.into(), &entry.admin_id);
+            let name = self.free_name(name.into(), &entry);
             // The shared key stays implicit, so rotating it keeps reaching these.
-            if api_key != self.api_key {
+            if api_key != self.api_key || entry.region.unwrap_or(self.region) != self.region {
                 entry.api_key = Some(api_key.to_string());
             }
             if self.administrations.insert(name.clone(), entry).is_some() {
@@ -251,16 +275,24 @@ impl Config {
     ///
     /// Returns `name` unchanged when it is free or already refers to this same
     /// administration, and otherwise the first free `name_2`, `name_3`, and so on.
-    fn free_name(&self, name: String, admin_id: &str) -> String {
+    fn free_name(&self, name: String, entry: &AdminEntry) -> String {
         match self.administrations.get(&name) {
             None => name,
-            Some(existing) if existing.admin_id == admin_id => name,
+            Some(existing)
+                if existing.admin_id == entry.admin_id
+                    && existing.region.unwrap_or(self.region)
+                        == entry.region.unwrap_or(self.region) =>
+            {
+                name
+            }
             Some(_) => (2..)
                 .map(|n| format!("{name}_{n}"))
                 .find(|candidate| {
-                    self.administrations
-                        .get(candidate)
-                        .is_none_or(|e| e.admin_id == admin_id)
+                    self.administrations.get(candidate).is_none_or(|e| {
+                        e.admin_id == entry.admin_id
+                            && e.region.unwrap_or(self.region)
+                                == entry.region.unwrap_or(self.region)
+                    })
                 })
                 .unwrap_or(name),
         }

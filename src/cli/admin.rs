@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::client::accounting::{AccountingClient, Administration};
-use crate::config::Config;
+use crate::config::{Config, Region};
 use crate::error::YukiError;
 use crate::output::{
     ListOptions, OutputFormat, apply_pagination, format_json, format_table, is_tty, select_fields,
@@ -35,6 +35,7 @@ struct Row {
     admin_id: String,
     domain_id: String,
     is_default: bool,
+    region: Region,
     status: &'static str,
 }
 
@@ -47,6 +48,7 @@ impl Row {
             self.domain_id,
             if self.is_default { "Yes" } else { "No" }.to_string(),
             self.status.to_string(),
+            self.region.to_string(),
         ]
     }
 }
@@ -59,6 +61,7 @@ fn headers() -> Vec<String> {
         "Domain ID".into(),
         "Default".into(),
         "Status".into(),
+        "Region".into(),
     ]
 }
 
@@ -74,6 +77,7 @@ fn local_rows(config: &Config) -> Vec<Row> {
             domain_id: entry.domain_id.clone(),
             is_default: *name == config.default_admin,
             status: status::NOT_CHECKED,
+            region: entry.region.unwrap_or(config.region),
         })
         .collect()
 }
@@ -92,18 +96,18 @@ async fn remote_rows(config: &Config) -> Result<Vec<Row>, YukiError> {
     }
 
     // Administrations returned per key, keyed by the key itself.
-    let mut reachable: BTreeMap<&str, Vec<Administration>> = BTreeMap::new();
+    let mut reachable: BTreeMap<(Region, &str), Vec<Administration>> = BTreeMap::new();
     let mut first_failure: Option<YukiError> = None;
 
     for key in &keys {
-        let mut client = AccountingClient::new();
+        let mut client = AccountingClient::with_region(key.region);
         let outcome = match client.authenticate(key.api_key).await {
             Ok(_) => client.administrations().await,
             Err(e) => Err(e),
         };
         match outcome {
             Ok(admins) => {
-                reachable.insert(key.api_key, admins);
+                reachable.insert((key.region, key.api_key), admins);
             }
             Err(e) => {
                 let used_by = if key.admins.is_empty() {
@@ -111,7 +115,10 @@ async fn remote_rows(config: &Config) -> Result<Vec<Row>, YukiError> {
                 } else {
                     key.admins.join(", ")
                 };
-                eprintln!("warning: key for {used_by} could not be used: {e}");
+                eprintln!(
+                    "warning: key for {used_by} in region {} could not be used: {e}",
+                    key.region
+                );
                 if first_failure.is_none() {
                     first_failure = Some(e);
                 }
@@ -134,23 +141,28 @@ async fn remote_rows(config: &Config) -> Result<Vec<Row>, YukiError> {
 /// `reachable` holds the administrations each key returned, keyed by that key; a key
 /// that failed is absent from it, which is what separates `auth failed` from
 /// `unreachable`.
-fn reconcile(config: &Config, reachable: &BTreeMap<&str, Vec<Administration>>) -> Vec<Row> {
+fn reconcile(
+    config: &Config,
+    reachable: &BTreeMap<(Region, &str), Vec<Administration>>,
+) -> Vec<Row> {
     let mut rows = Vec::new();
-    let mut claimed: Vec<&str> = Vec::new();
+    let mut claimed: Vec<(Region, &str)> = Vec::new();
 
     for (name, entry) in &config.administrations {
         let api_key = entry.api_key.as_deref().unwrap_or(&config.api_key);
+        let region = entry.region.unwrap_or(config.region);
+        let key = (region, api_key);
         let live = reachable
-            .get(api_key)
+            .get(&key)
             .and_then(|admins| admins.iter().find(|a| a.id == entry.admin_id));
 
-        let status = match (reachable.contains_key(api_key), live.is_some()) {
+        let status = match (reachable.contains_key(&key), live.is_some()) {
             (_, true) => status::OK,
             (true, false) => status::UNREACHABLE,
             (false, false) => status::AUTH_FAILED,
         };
         if live.is_some() {
-            claimed.push(&entry.admin_id);
+            claimed.push((region, &entry.admin_id));
         }
 
         rows.push(Row {
@@ -163,24 +175,32 @@ fn reconcile(config: &Config, reachable: &BTreeMap<&str, Vec<Administration>>) -
             domain_id: entry.domain_id.clone(),
             is_default: *name == config.default_admin,
             status,
+            region,
         });
     }
 
     // Anything a key can reach that no configured entry accounts for.
-    let mut extra: Vec<&Administration> = reachable
-        .values()
-        .flatten()
-        .filter(|a| !claimed.contains(&a.id.as_str()))
+    let mut extra: Vec<(Region, &Administration)> = reachable
+        .iter()
+        .flat_map(|((region, _), admins)| admins.iter().map(move |admin| (*region, admin)))
+        .filter(|(region, admin)| !claimed.contains(&(*region, admin.id.as_str())))
         .collect();
-    extra.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
-    extra.dedup_by(|a, b| a.id == b.id);
+    extra.sort_by(|(ra, a), (rb, b)| ra.cmp(rb).then_with(|| a.id.cmp(&b.id)));
+    extra.dedup_by(|(ra, a), (rb, b)| ra == rb && a.id == b.id);
+    extra.sort_by(|(ra, a), (rb, b)| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| ra.cmp(rb))
+            .then_with(|| a.id.cmp(&b.id))
+    });
 
-    rows.extend(extra.into_iter().map(|a| Row {
+    rows.extend(extra.into_iter().map(|(region, a)| Row {
         name: a.name.clone(),
         config_name: String::new(),
         admin_id: a.id.clone(),
         domain_id: a.domain_id.clone(),
         is_default: false,
+        region,
         status: status::NOT_CONFIGURED,
     }));
 
@@ -250,6 +270,7 @@ mod tests {
                 .into_iter()
                 .map(|(name, entry)| (name.to_string(), entry))
                 .collect(),
+            region: Default::default(),
             unmatched_ignore: Vec::new(),
         }
     }
@@ -276,11 +297,11 @@ mod tests {
         );
         let reachable = BTreeMap::from([
             (
-                "trading-key",
+                (Region::Nl, "trading-key"),
                 vec![admin("admin-a", "Example Trading B.V.", "domain-a")],
             ),
             (
-                "holding-key",
+                (Region::Nl, "holding-key"),
                 vec![admin("admin-b", "Example Holding B.V.", "domain-b")],
             ),
         ]);
@@ -313,7 +334,7 @@ mod tests {
             ],
         );
         let reachable = BTreeMap::from([(
-            "trading-key",
+            (Region::Nl, "trading-key"),
             vec![admin("admin-a", "Example Trading B.V.", "domain-a")],
         )]);
 
@@ -338,7 +359,7 @@ mod tests {
             ],
         );
         let reachable = BTreeMap::from([(
-            "trading-key",
+            (Region::Nl, "trading-key"),
             vec![admin("admin-a", "Example Trading B.V.", "domain-a")],
         )]);
 
@@ -355,7 +376,7 @@ mod tests {
             [("trading", AdminEntry::new("domain-a", "admin-a"))],
         );
         let reachable = BTreeMap::from([(
-            "trading-key",
+            (Region::Nl, "trading-key"),
             vec![
                 admin("admin-a", "Example Trading B.V.", "domain-a"),
                 admin("admin-b", "Example Holding B.V.", "domain-b"),
@@ -383,9 +404,9 @@ mod tests {
         );
         let shared = admin("admin-a", "Example Trading B.V.", "domain-a");
         let reachable = BTreeMap::from([
-            ("trading-key", vec![shared.clone()]),
+            ((Region::Nl, "trading-key"), vec![shared.clone()]),
             (
-                "holding-key",
+                (Region::Nl, "holding-key"),
                 vec![shared, admin("admin-z", "Other B.V.", "domain-z")],
             ),
         ]);
@@ -436,5 +457,43 @@ mod tests {
         );
         let rows = local_rows(&config);
         assert_eq!(rows[0].name, UNKNOWN_NAME);
+    }
+}
+
+#[cfg(test)]
+mod regional_tests {
+    use super::*;
+    use crate::config::AdminEntry;
+
+    #[test]
+    fn same_ids_and_key_in_different_regions_remain_distinct() {
+        let config = Config {
+            api_key: "key".into(),
+            region: Region::Nl,
+            default_admin: "nl".into(),
+            unmatched_ignore: Vec::new(),
+            administrations: BTreeMap::from([
+                ("nl".into(), AdminEntry::new("domain", "admin")),
+                (
+                    "be".into(),
+                    AdminEntry::new("domain", "admin").with_region(Region::Be),
+                ),
+            ]),
+        };
+        let reachable = BTreeMap::from([(
+            (Region::Be, "key"),
+            vec![Administration {
+                id: "admin".into(),
+                domain_id: "domain".into(),
+                name: "Belgian company".into(),
+            }],
+        )]);
+        let rows = reconcile(&config, &reachable);
+        assert_eq!(rows.len(), 2);
+        let nl = rows.iter().find(|r| r.config_name == "nl").unwrap();
+        assert_eq!(nl.status, status::AUTH_FAILED);
+        let be = rows.iter().find(|r| r.config_name == "be").unwrap();
+        assert_eq!(be.status, status::OK);
+        assert_eq!(be.region, Region::Be);
     }
 }

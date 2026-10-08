@@ -77,7 +77,7 @@ fn canonical_local_account_workflow_preserves_unrelated_credentials() {
     let doctor = stdout_json(yuki(&home, &["doctor", "--offline", "--output", "json"]));
     assert_eq!(doctor["ok"], true);
     assert_eq!(doctor["offline"], true);
-    assert_eq!(doctor["checks"].as_array().map(Vec::len), Some(4));
+    assert_eq!(doctor["checks"].as_array().map(Vec::len), Some(5));
 
     let shown = stdout_json(yuki(&home, &["config", "show", "--output", "json"]));
     assert_eq!(shown["active_profile"], "holding");
@@ -200,5 +200,54 @@ fn schema_advertises_the_standard_account_contract() {
         "doctor",
     ] {
         assert!(names.contains(&required), "schema missing {required}");
+    }
+}
+
+#[test]
+fn mixed_regions_are_visible_and_survive_profile_changes() {
+    let home = TempDir::new().unwrap();
+    write_config(&home);
+    let path = config_path(&home);
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    text.push_str("region = 'be'\n"); // belongs to the final [administrations.holding] section
+    std::fs::write(&path, text).unwrap();
+    let profiles = stdout_json(yuki(&home, &["profile", "list", "--output", "json"]));
+    assert_eq!(profiles["items"][0]["region"], "nl");
+    assert_eq!(profiles["items"][1]["region"], "be");
+    stdout_json(yuki(
+        &home,
+        &["profile", "use", "holding", "--output", "json"],
+    ));
+    let status = stdout_json(yuki(
+        &home,
+        &["auth", "status", "--offline", "--output", "json"],
+    ));
+    assert_eq!(status["region"], "be");
+    let doctor = stdout_json(yuki(&home, &["doctor", "--offline", "--output", "json"]));
+    let region = doctor["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "region")
+        .unwrap();
+    assert_eq!(region["detail"], "be");
+    assert_eq!(region["host"], "https://api.yukiworks.be");
+    let config = stdout_json(yuki(&home, &["config", "show", "--output", "json"]));
+    assert_eq!(config["region"], "nl");
+    assert_eq!(config["profiles"]["holding"]["region"], "be");
+    assert!(!config.to_string().contains("holding-key"));
+}
+
+#[test]
+fn setup_rejects_unknown_region_before_network_or_config_writes() {
+    let home = TempDir::new().unwrap();
+    for command in [
+        vec!["init", "--region", "fr"],
+        vec!["auth", "login", "--region", "fr"],
+    ] {
+        let output = yuki(&home, &command);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("region must be"));
+        assert!(!config_path(&home).exists());
     }
 }

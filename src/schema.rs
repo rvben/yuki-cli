@@ -49,7 +49,8 @@ pub fn generate() -> Value {
                     {"name": "domain_id", "type": "string"},
                     {"name": "admin_id", "type": "string"},
                     {"name": "default", "type": "string", "description": "Yes for the administration used when --admin is omitted, otherwise No."},
-                    {"name": "status", "type": "string", "description": "ok, auth failed, unreachable, not configured, or not checked with --local."}
+                    {"name": "status", "type": "string", "description": "ok, auth failed, unreachable, not configured, or not checked with --local."},
+                    {"name": "region", "type": "string", "description": "Regional API host: nl or be."}
                 ]
             },
             {
@@ -401,6 +402,7 @@ pub fn generate() -> Value {
                 "mutating": true,
                 "args": [
                     {"name": "--api-key", "type": "string", "required": false, "description": "API key (skips interactive prompt if provided)."},
+                    {"name": "--region", "type": "string", "required": false, "description": "API region: nl (Netherlands) or be (Belgium). Defaults to the saved region or nl."},
                     {"name": "--default-admin", "type": "string", "required": false, "description": "Default administration name (auto-selects if only one available)."},
                     {"name": "--add", "type": "boolean", "required": false, "description": "Merge the key's administrations into the existing configuration instead of replacing it."}
                 ]
@@ -411,6 +413,7 @@ pub fn generate() -> Value {
                 "mutating": true,
                 "args": [
                     {"name": "--api-key", "type": "string", "required": false, "description": "API key (skips interactive prompt if provided)."},
+                    {"name": "--region", "type": "string", "required": false, "description": "API region: nl (Netherlands) or be (Belgium). Defaults to the saved region or nl."},
                     {"name": "--default-admin", "type": "string", "required": false, "description": "Default administration name."},
                     {"name": "--add", "type": "boolean", "required": false, "description": "Merge the key's administrations into the existing configuration."}
                 ]
@@ -427,7 +430,8 @@ pub fn generate() -> Value {
                     {"name": "status", "type": "string"},
                     {"name": "configured", "type": "boolean"},
                     {"name": "verified", "type": "boolean"},
-                    {"name": "credential_source", "type": "string"}
+                    {"name": "credential_source", "type": "string"},
+                    {"name": "region", "type": "string"}
                 ]
             },
             {
@@ -453,7 +457,8 @@ pub fn generate() -> Value {
                         {"name": "admin_id", "type": "string"},
                         {"name": "domain_id", "type": "string"},
                         {"name": "configured", "type": "boolean"},
-                        {"name": "credential_source", "type": "string"}
+                        {"name": "credential_source", "type": "string"},
+                        {"name": "region", "type": "string"}
                     ]}},
                     {"name": "total", "type": "integer"}
                 ]
@@ -490,6 +495,7 @@ pub fn generate() -> Value {
                     {"name": "config_file", "type": "string"},
                     {"name": "file_exists", "type": "boolean"},
                     {"name": "active_profile", "type": "string"},
+                    {"name": "region", "type": "string"},
                     {"name": "profiles", "type": "object"},
                     {"name": "shared_api_key_configured", "type": "boolean"}
                 ]
@@ -515,7 +521,8 @@ pub fn generate() -> Value {
                     {"name": "checks", "type": "array", "items": {"type": "object", "fields": [
                         {"name": "name", "type": "string"},
                         {"name": "ok", "type": "boolean"},
-                        {"name": "detail", "type": "string"}
+                        {"name": "detail", "type": "string"},
+                        {"name": "host", "type": "string", "description": "API host for the region check, when present."}
                     ]}}
                 ]
             },

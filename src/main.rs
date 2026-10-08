@@ -105,12 +105,14 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Commands::Init {
             api_key,
             default_admin,
+            region,
             add,
         } => {
             yuki_cli::cli::init::run(
                 api_key.as_deref(),
                 default_admin.as_deref().or(cli.admin.as_deref()),
                 add,
+                region,
             )
             .await?;
         }
@@ -119,12 +121,14 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             AuthCommands::Login {
                 api_key,
                 default_admin,
+                region,
                 add,
             } => {
                 yuki_cli::cli::init::run(
                     api_key.as_deref(),
                     default_admin.as_deref().or(cli.admin.as_deref()),
                     add,
+                    region,
                 )
                 .await?;
             }

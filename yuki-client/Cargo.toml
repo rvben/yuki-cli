@@ -1,9 +1,9 @@
 [package]
 name = "yuki-client"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.90"
-description = "Typed async client for the Yuki bookkeeping SOAP API"
+description = "Typed async client for the Nmbrs Accounting (formerly Yuki) SOAP API"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/rvben/yuki-cli"
@@ -15,6 +15,7 @@ name = "yuki_client"
 path = "src/lib.rs"
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
 quick-xml = "0.42"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 thiserror = "2"

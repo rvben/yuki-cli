@@ -1,4 +1,4 @@
-//! Typed async client for the Yuki bookkeeping SOAP API.
+//! Typed async client for the Nmbrs Accounting (formerly Yuki) SOAP API.
 //!
 //! The transport ([`client::soap_client::SoapClient`]) accepts a caller-provided
 //! [`reqwest::Client`] via [`client::soap_client::SoapClient::with_client`], so a
@@ -10,3 +10,6 @@
 pub mod client;
 pub mod error;
 pub mod period;
+
+pub mod region;
+pub use region::Region;

@@ -20,7 +20,7 @@ pub async fn btw(
     if !quiet {
         eprintln!("[1/3] Fetching VAT return list...");
     }
-    let mut vat_client = VatClient::new();
+    let mut vat_client = VatClient::with_region(target.region);
     vat_client.authenticate(target.api_key).await?;
     let vat_returns = vat_client.vat_return_list(target.admin_id).await?;
 
@@ -147,7 +147,7 @@ pub async fn unmatched(
     if !quiet {
         eprintln!("[3/3] Fetching booked invoices from archive...");
     }
-    let mut archive_client = ArchiveClient::new();
+    let mut archive_client = ArchiveClient::with_region(target.region);
     archive_client.authenticate(target.api_key).await?;
     let archive_docs = archive_client.search_documents("", &start, &end).await?;
 

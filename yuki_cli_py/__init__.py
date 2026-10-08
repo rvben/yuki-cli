@@ -1,5 +1,5 @@
 """
-yuki-cli: CLI client for the Yuki bookkeeping SOAP API.
+yuki-cli: CLI for Nmbrs Accounting (formerly Yuki) SOAP API.
 """
 
 try:

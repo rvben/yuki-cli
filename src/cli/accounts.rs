@@ -86,8 +86,17 @@ pub async fn scheme(
     admin: Option<&str>,
     format: Option<&str>,
 ) -> Result<(), YukiError> {
+    scheme_with_client(config, admin, format, reqwest::Client::new()).await
+}
+
+pub(crate) async fn scheme_with_client(
+    config: &Config,
+    admin: Option<&str>,
+    format: Option<&str>,
+    http: reqwest::Client,
+) -> Result<(), YukiError> {
     let target = config.target(admin)?;
-    let mut client = AccountingInfoClient::new();
+    let mut client = AccountingInfoClient::with_region_and_client(target.region, http);
     client.authenticate(target.api_key).await?;
     let accounts = client.get_gl_account_scheme(target.admin_id).await?;
 
@@ -120,7 +129,7 @@ pub async fn start_balance(
         }
     };
     let target = config.target(admin)?;
-    let mut client = AccountingInfoClient::new();
+    let mut client = AccountingInfoClient::with_region(target.region);
     client.authenticate(target.api_key).await?;
     let balances = client
         .get_start_balance_by_gl_account(target.admin_id, bookyear)

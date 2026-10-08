@@ -13,7 +13,7 @@ pub mod vat;
 use clap::{Parser, Subcommand};
 
 use crate::client::accounting::AccountingClient;
-use crate::config::{Config, Target};
+use crate::config::{Config, Region, Target};
 use crate::error::YukiError;
 
 /// Authenticate a client and set the active administration domain.
@@ -24,19 +24,27 @@ pub async fn setup_domain<'a>(
     config: &'a Config,
     admin: Option<&str>,
 ) -> Result<(AccountingClient, Target<'a>), YukiError> {
+    setup_domain_with_client(config, admin, reqwest::Client::new()).await
+}
+
+pub(crate) async fn setup_domain_with_client<'a>(
+    config: &'a Config,
+    admin: Option<&str>,
+    http: reqwest::Client,
+) -> Result<(AccountingClient, Target<'a>), YukiError> {
     let target = config.target(admin)?;
-    let mut client = AccountingClient::new();
+    let mut client = AccountingClient::with_region_and_client(target.region, http);
     client.authenticate(target.api_key).await?;
     client.set_current_domain(target.domain_id).await?;
     Ok((client, target))
 }
 
-/// Top-level CLI entry point for the Yuki bookkeeping API client.
+/// Top-level CLI entry point for the Nmbrs Accounting (formerly Yuki) API client.
 #[derive(Parser)]
 #[command(
     name = "yuki",
     version,
-    about = "CLI client for the Yuki bookkeeping API"
+    about = "CLI for Nmbrs Accounting (formerly Yuki) SOAP API"
 )]
 pub struct Cli {
     /// Override the active administration by name.
@@ -67,12 +75,16 @@ pub enum Commands {
         #[arg(long)]
         api_key: Option<String>,
 
+        /// API region: nl (Netherlands) or be (Belgium). Defaults to the saved region or nl.
+        #[arg(long)]
+        region: Option<Region>,
+
         /// Default administration name (auto-selects if only one available).
         #[arg(long)]
         default_admin: Option<String>,
 
         /// Merge the key's administrations into the existing config instead of
-        /// replacing it. Use this to reach a second administration, which Yuki
+        /// replacing it. Use this to reach a second administration, which Nmbrs Accounting
         /// exposes only through a key created inside it.
         #[arg(long)]
         add: bool,
@@ -84,7 +96,7 @@ pub enum Commands {
         command: AuthCommands,
     },
 
-    /// Manage configuration profiles (Yuki administrations).
+    /// Manage configuration profiles (Nmbrs Accounting administrations).
     Profile {
         #[command(subcommand)]
         command: ProfileCommands,
@@ -96,14 +108,14 @@ pub enum Commands {
         command: ConfigCommands,
     },
 
-    /// Check configuration and Yuki connectivity.
+    /// Check configuration and Nmbrs Accounting connectivity.
     Doctor {
-        /// Check local configuration without contacting Yuki.
+        /// Check local configuration without contacting Nmbrs Accounting.
         #[arg(long)]
         offline: bool,
     },
 
-    /// Manage Yuki administrations.
+    /// Manage Nmbrs Accounting administrations.
     Admin {
         #[command(subcommand)]
         command: AdminCommands,
@@ -151,7 +163,7 @@ pub enum Commands {
         command: CheckCommands,
     },
 
-    /// Upload documents to the Yuki archive.
+    /// Upload documents to the Nmbrs Accounting archive.
     Upload {
         #[command(subcommand)]
         command: UploadCommands,
@@ -178,6 +190,10 @@ pub enum AuthCommands {
         #[arg(long)]
         api_key: Option<String>,
 
+        /// API region: nl (Netherlands) or be (Belgium). Defaults to the saved region or nl.
+        #[arg(long)]
+        region: Option<Region>,
+
         /// Default administration name (auto-selects if only one available).
         #[arg(long)]
         default_admin: Option<String>,
@@ -189,7 +205,7 @@ pub enum AuthCommands {
 
     /// Show whether the selected profile is configured and valid.
     Status {
-        /// Check local configuration without contacting Yuki.
+        /// Check local configuration without contacting Nmbrs Accounting.
         #[arg(long)]
         offline: bool,
     },
@@ -515,3 +531,6 @@ pub enum UploadCommands {
     /// List available payment methods.
     PaymentMethods,
 }
+
+#[cfg(test)]
+mod test_support;

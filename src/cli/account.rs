@@ -1,6 +1,5 @@
 use serde_json::{Value, json};
 
-use crate::client::accounting::AccountingClient;
 use crate::config::{AdminEntry, Config};
 use crate::error::YukiError;
 use crate::output::{OutputFormat, is_tty};
@@ -76,6 +75,7 @@ pub async fn auth_status(
             "configured": true,
             "verified": !offline,
             "credential_source": credential_source,
+            "region": entry.region.unwrap_or(config.region),
         }),
         &format!(
             "Profile '{name}' is {} ({credential_source}).",
@@ -139,6 +139,7 @@ pub fn profile_list(config: &Config, format: Option<&str>, quiet: bool) {
                 "domain_id": entry.domain_id,
                 "configured": !api_key.is_empty(),
                 "credential_source": credential_source,
+                "region": entry.region.unwrap_or(config.region),
             })
         })
         .collect::<Vec<_>>();
@@ -156,13 +157,14 @@ pub fn profile_list(config: &Config, format: Option<&str>, quiet: bool) {
         } else {
             for item in items {
                 println!(
-                    "{} {:<24} {}",
+                    "{} {:<24} {:<2} {}",
                     if item["active"].as_bool().unwrap_or(false) {
                         "*"
                     } else {
                         " "
                     },
                     item["name"].as_str().unwrap_or_default(),
+                    item["region"].as_str().unwrap_or_default(),
                     if item["configured"].as_bool().unwrap_or(false) {
                         "configured"
                     } else {
@@ -235,6 +237,7 @@ pub fn config_show(config: &Config, format: Option<&str>, quiet: bool) {
                     "domain_id": entry.domain_id,
                     "configured": !api_key.is_empty(),
                     "credential_source": credential_source,
+                    "region": entry.region.unwrap_or(config.region),
                 }),
             )
         })
@@ -244,13 +247,15 @@ pub fn config_show(config: &Config, format: Option<&str>, quiet: bool) {
         "config_file": path,
         "file_exists": path.exists(),
         "active_profile": config.default_admin,
+        "region": config.region,
         "profiles": profiles,
         "shared_api_key_configured": !config.api_key.is_empty(),
     });
     let human = format!(
-        "Config file: {}\nActive profile: {}\nProfiles: {}",
+        "Config file: {}\nActive profile: {}\nShared region: {}\nProfiles: {}",
         path.display(),
         config.default_admin,
+        config.region,
         config.administrations.len()
     );
     print_result(format, quiet, &value, &human);
@@ -273,6 +278,25 @@ pub async fn doctor(
     format: Option<&str>,
     quiet: bool,
 ) -> Result<(), YukiError> {
+    doctor_with_client(
+        config,
+        profile,
+        offline,
+        format,
+        quiet,
+        reqwest::Client::new(),
+    )
+    .await
+}
+
+pub(crate) async fn doctor_with_client(
+    config: &Config,
+    profile: Option<&str>,
+    offline: bool,
+    format: Option<&str>,
+    quiet: bool,
+    http: reqwest::Client,
+) -> Result<(), YukiError> {
     let (name, entry) = selected(config, profile)?;
     let (credential_source, api_key) = credential_state(config, entry);
     if api_key.is_empty() {
@@ -281,24 +305,25 @@ pub async fn doctor(
         )));
     }
     if !offline {
-        let mut client = AccountingClient::new();
-        client.authenticate(api_key).await?;
-        client.set_current_domain(&entry.domain_id).await?;
+        super::setup_domain_with_client(config, Some(name), http).await?;
     }
+    let region = entry.region.unwrap_or(config.region);
     let checks = json!([
         {"name": "configuration", "ok": true, "detail": Config::default_path()},
         {"name": "profile", "ok": true, "detail": name},
+        {"name": "region", "ok": true, "detail": region, "host": region.host()},
         {"name": "credentials", "ok": true, "detail": credential_source},
         {"name": "authentication", "ok": true, "detail": if offline { "network check skipped" } else { "Yuki session and administration verified" }},
     ]);
     let human = format!(
-        "Yuki connection{}\n  ✓ configuration\n  ✓ profile         {name}\n  ✓ credentials     {credential_source}\n  ✓ authentication  {}",
+        "Yuki connection{}\n  ✓ configuration\n  ✓ profile         {name}\n  ✓ region          {region} ({host})\n  ✓ credentials     {credential_source}\n  ✓ authentication  {}",
         if offline { " (offline)" } else { "" },
         if offline {
             "network check skipped"
         } else {
             "verified"
-        }
+        },
+        host = region.host(),
     );
     print_result(
         format,

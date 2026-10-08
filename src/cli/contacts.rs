@@ -28,7 +28,7 @@ pub async fn search(
     format: Option<&str>,
 ) -> Result<(), YukiError> {
     let target = config.target(admin)?;
-    let mut client = ContactClient::new();
+    let mut client = ContactClient::with_region(target.region);
     client.authenticate(target.api_key).await?;
     let contacts = client.search_contacts(query).await?;
 
@@ -82,7 +82,7 @@ pub async fn list(
 ) -> Result<(), YukiError> {
     let contact_type = contact_type_value(contact_type)?;
     let target = config.target(admin)?;
-    let mut client = ContactClient::new();
+    let mut client = ContactClient::with_region(target.region);
     client.authenticate(target.api_key).await?;
     let contacts = client.get_suppliers_and_customers(contact_type).await?;
 

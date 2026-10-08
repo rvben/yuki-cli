@@ -2246,6 +2246,8 @@ dependencies = [
  "comfy-table",
  "jsonschema",
  "owo-colors",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tempfile",
@@ -2256,10 +2258,11 @@ dependencies = [
 
 [[package]]
 name = "yuki-client"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "quick-xml",
  "reqwest",
+ "serde",
  "thiserror",
 ]
 

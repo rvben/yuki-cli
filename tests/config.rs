@@ -13,6 +13,7 @@ fn config_with(
             .into_iter()
             .map(|(name, entry)| (name.to_string(), entry))
             .collect(),
+        region: Default::default(),
         unmatched_ignore: Vec::new(),
     }
 }
@@ -473,4 +474,91 @@ admin_id = "admin-1"
 
     let config = Config::load_from(&path).unwrap();
     assert!(config.unmatched_ignore.is_empty());
+}
+
+#[test]
+fn legacy_configs_default_to_nl_and_profile_regions_survive_roundtrip() {
+    use yuki_cli::config::Region;
+    let mut config = config_with(
+        "key",
+        "dutch",
+        [
+            ("dutch", AdminEntry::new("domain-nl", "admin-nl")),
+            (
+                "belgian",
+                AdminEntry::new("domain-be", "admin-be").with_region(Region::Be),
+            ),
+        ],
+    );
+    assert_eq!(config.target(None).unwrap().region, Region::Nl);
+    assert_eq!(config.target(Some("belgian")).unwrap().region, Region::Be);
+    config.region = Region::Be;
+    config.administrations.get_mut("dutch").unwrap().region = Some(Region::Nl);
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    config.save_to(&path).unwrap();
+    let loaded = Config::load_from(&path).unwrap();
+    assert_eq!(loaded.region, Region::Be);
+    assert_eq!(loaded.target(Some("dutch")).unwrap().region, Region::Nl);
+    assert_eq!(loaded.target(Some("belgian")).unwrap().region, Region::Be);
+    // Old serialized configurations omit both fields entirely.
+    let legacy = "api_key = 'key'\ndefault_admin = 'co'\n[administrations.co]\ndomain_id = 'domain'\nadmin_id = 'admin'\n";
+    let loaded: Config = toml::from_str(legacy).unwrap();
+    assert_eq!(loaded.target(None).unwrap().region, Region::Nl);
+    for invalid in ["region = 'fr'\n", "region = 'BE'\n"] {
+        assert!(toml::from_str::<Config>(&format!("{invalid}{legacy}")).is_err());
+        assert!(toml::from_str::<Config>(&format!("{legacy}{invalid}")).is_err());
+    }
+}
+
+#[test]
+fn identical_keys_on_different_hosts_are_authenticated_separately() {
+    use yuki_cli::config::Region;
+    let config = config_with(
+        "same-key",
+        "nl",
+        [
+            ("nl", AdminEntry::new("nl", "nl")),
+            ("be", AdminEntry::new("be", "be").with_region(Region::Be)),
+        ],
+    );
+    let keys = config.access_keys();
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0].region, Region::Nl);
+    assert_eq!(keys[0].admins, ["nl"]);
+    assert_eq!(keys[1].region, Region::Be);
+    assert_eq!(keys[1].admins, ["be"]);
+}
+
+#[test]
+fn merging_other_region_preserves_both_profiles_even_with_identical_ids() {
+    use yuki_cli::config::Region;
+    let mut config = config_with(
+        "same-key",
+        "company",
+        [("company", AdminEntry::new("domain", "admin"))],
+    );
+    for _ in 0..2 {
+        config.merge_administrations(
+            [(
+                "company",
+                AdminEntry::new("domain", "admin").with_region(Region::Be),
+            )],
+            "same-key",
+        );
+    }
+    assert_eq!(config.administrations.len(), 2);
+    assert_eq!(config.region, Region::Nl);
+    let be = config.target(Some("company_2")).unwrap();
+    assert_eq!(be.region, Region::Be);
+    // Pin the key even when its text matches the key on another host.
+    assert_eq!(
+        config.administrations["company_2"].api_key.as_deref(),
+        Some("same-key")
+    );
+    config.api_key = "rotated-nl-key".into();
+    assert_eq!(
+        config.target(Some("company_2")).unwrap().api_key,
+        "same-key"
+    );
 }

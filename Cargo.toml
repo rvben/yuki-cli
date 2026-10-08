@@ -6,7 +6,7 @@ name = "yuki-cli"
 version = "0.1.13"
 edition = "2024"
 rust-version = "1.90"
-description = "CLI client for the Yuki bookkeeping SOAP API"
+description = "CLI for Nmbrs Accounting (formerly Yuki) SOAP API"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/rvben/yuki-cli"
@@ -26,7 +26,8 @@ name = "yuki-cli"
 path = "src/yuki_cli_alias.rs"
 
 [dependencies]
-yuki-client = { path = "yuki-client", version = "0.2.1" }
+yuki-client = { path = "yuki-client", version = "0.2.2" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 anyhow = "1"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
@@ -39,5 +40,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 toml = "0.8"
 
 [dev-dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tempfile = "3"
 jsonschema = "0.30"

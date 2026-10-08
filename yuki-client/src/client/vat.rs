@@ -1,12 +1,11 @@
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
+use crate::Region;
 use crate::error::YukiError;
 
 use super::soap_client::{SoapClient, SoapEnvelope};
 use super::{local_name, unescape_text};
-
-const BASE_URL: &str = "https://api.yukiworks.nl/ws/Vat.asmx";
 
 /// A VAT return record for a specific period.
 #[derive(Debug, Clone)]
@@ -31,16 +30,24 @@ pub struct VatClient {
 
 impl VatClient {
     pub fn new() -> Self {
-        Self {
-            soap: SoapClient::new(BASE_URL),
-        }
+        Self::with_region(Region::default())
     }
 
     /// Build over a caller-provided HTTP client, so a long-running consumer can
     /// share a single pooled client across all service clients.
     pub fn with_client(http: reqwest::Client) -> Self {
+        Self::with_region_and_client(Region::default(), http)
+    }
+
+    /// Use the regional host serving the administration and its credentials.
+    pub fn with_region(region: Region) -> Self {
+        Self::with_region_and_client(region, reqwest::Client::new())
+    }
+
+    /// Select a regional host while reusing a caller-provided HTTP client.
+    pub fn with_region_and_client(region: Region, http: reqwest::Client) -> Self {
         Self {
-            soap: SoapClient::with_client(BASE_URL, http),
+            soap: SoapClient::with_client(&region.endpoint("Vat"), http),
         }
     }
 
@@ -238,5 +245,32 @@ impl VatClient {
 impl Default for VatClient {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::*;
+
+    #[test]
+    fn selects_regional_service_endpoint_and_preserves_dutch_default() {
+        assert_eq!(
+            VatClient::new().soap.base_url,
+            "https://api.yukiworks.nl/ws/Vat.asmx"
+        );
+        assert_eq!(
+            VatClient::with_client(reqwest::Client::new()).soap.base_url,
+            "https://api.yukiworks.nl/ws/Vat.asmx"
+        );
+        assert_eq!(
+            VatClient::with_region(Region::Be).soap.base_url,
+            "https://api.yukiworks.be/ws/Vat.asmx"
+        );
+        assert_eq!(
+            VatClient::with_region_and_client(Region::Be, reqwest::Client::new())
+                .soap
+                .base_url,
+            "https://api.yukiworks.be/ws/Vat.asmx"
+        );
     }
 }

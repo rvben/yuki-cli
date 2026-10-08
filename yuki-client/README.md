@@ -1,6 +1,16 @@
 # yuki-client
 
-Typed async client for the [Yuki](https://www.yukiworks.nl/) bookkeeping SOAP API.
+Typed async client for the [Nmbrs Accounting](https://www.nmbrs.com/nl/accounting/nmbrs-accounting) (formerly Yuki) SOAP API.
+
+The crate retains its `yuki-client` name for compatibility. The existing SOAP namespace remains unchanged. Clients default to the Dutch
+`api.yukiworks.nl` host; use `with_region(Region::Be)` for the Belgian
+`api.yukiworks.be` host, or `with_region_and_client` to reuse a pooled HTTP client.
+
+```rust
+use yuki_client::{Region, client::accounting::AccountingClient};
+
+let client = AccountingClient::with_region(Region::Be);
+```
 
 This crate is the transport and parsing layer extracted from
 [`yuki-cli`](https://github.com/rvben/yuki-cli): SOAP envelope building,
