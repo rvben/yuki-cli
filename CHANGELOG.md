@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.14](https://github.com/rvben/yuki-cli/compare/v0.1.13...v0.1.14) - 2026-10-08
+
+### Fixed
+
+- **regions**: support Belgian administrations across SOAP services ([967f432](https://github.com/rvben/yuki-cli/commit/967f432b070505a311f3009c7679c7e7fa5890af))
+
 ## [0.1.13](https://github.com/rvben/yuki-cli/compare/v0.1.12...v0.1.13) - 2026-09-28
 
 ### Fixed
