@@ -12,6 +12,14 @@ The CLI keeps its `yuki` and `yuki-cli` command names, package names, and existi
 
 ## Install
 
+### Homebrew
+
+```sh
+brew install rvben/tap/yuki-cli
+```
+
+### Other installation methods
+
 ```sh
 cargo install yuki-cli
 ```
