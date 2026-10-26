@@ -36,10 +36,10 @@ comfy-table = "7"
 owo-colors = "4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros"] }
 toml = "0.8"
 
 [dev-dependencies]
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tempfile = "3"
 jsonschema = "0.30"
